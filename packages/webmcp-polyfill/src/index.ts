@@ -108,7 +108,7 @@ export interface WebMCPPolyfillInitOptions {
 
 class StrictWebMCPContext {
   private tools = new Map<string, PolyfillToolDescriptor>();
-  private toolsChangedCallback: (() => void) | null = null;
+  private testingShim: PolyfillTestingShim | null = null;
   private provideContextDeprecationWarned = false;
   private clearContextDeprecationWarned = false;
 
@@ -147,42 +147,28 @@ class StrictWebMCPContext {
     }
   }
 
-  getTestingShim(): ModelContextTesting {
-    return {
-      listTools: () => {
-        return [...this.tools.values()].map((tool) => {
-          const output: ModelContextTestingToolInfo = {
-            name: tool.name,
-            description: tool.description,
-          };
-
-          try {
-            output.inputSchema = JSON.stringify(tool.inputSchema);
-          } catch {
-            // Keep inputSchema omitted when serialization fails.
-          }
-
-          return output;
-        });
-      },
-      executeTool: (
-        toolName: string,
-        inputArgsJson: string,
-        options?: ModelContextTestingExecuteToolOptions
-      ) => this.executeToolForTesting(toolName, inputArgsJson, options),
-      registerToolsChangedCallback: (callback: () => void) => {
-        if (typeof callback !== 'function') {
-          throw new TypeError(
-            "Failed to execute 'registerToolsChangedCallback' on 'ModelContextTesting': parameter 1 is not of type 'Function'."
-          );
-        }
-        this.toolsChangedCallback = callback;
-      },
-      getCrossDocumentScriptToolResult: async () => '[]',
-    };
+  getTestingShim(): PolyfillTestingShim {
+    if (!this.testingShim) {
+      this.testingShim = new PolyfillTestingShim(this);
+    }
+    return this.testingShim;
   }
 
-  private async executeToolForTesting(
+  /** @internal Used by PolyfillTestingShim */
+  getToolInfos(): ModelContextTestingToolInfo[] {
+    return [...this.tools.values()].map((tool) => {
+      let inputSchema: string;
+      try {
+        inputSchema = JSON.stringify(tool.inputSchema ?? { type: 'object' });
+      } catch {
+        inputSchema = '{"type":"object"}';
+      }
+      return { name: tool.name, description: tool.description, inputSchema };
+    });
+  }
+
+  /** @internal Used by PolyfillTestingShim */
+  async executeToolForTesting(
     toolName: string,
     inputArgsJson: string,
     options?: ModelContextTestingExecuteToolOptions
@@ -235,17 +221,8 @@ class StrictWebMCPContext {
   }
 
   private notifyToolsChanged(): void {
-    if (!this.toolsChangedCallback) {
-      return;
-    }
-
     queueMicrotask(() => {
-      try {
-        this.toolsChangedCallback?.();
-      } catch (error) {
-        // Callback errors are ignored to match browser event callback behavior.
-        console.warn('[WebMCPPolyfill] toolsChanged callback threw:', error);
-      }
+      this.testingShim?.dispatchToolChange();
     });
   }
 
@@ -269,6 +246,71 @@ class StrictWebMCPContext {
     console.warn(
       '[WebMCPPolyfill] navigator.modelContext.clearContext() is deprecated and will be removed in the next major version. Unregister individual tools instead.'
     );
+  }
+}
+
+/**
+ * EventTarget-based testing shim matching the native Chromium ModelContextTesting surface.
+ *
+ * Fires `toolchange` events and supports the `ontoolchange` handler property,
+ * matching the native Chromium 148 API. The deprecated `registerToolsChangedCallback`
+ * is kept as a compat layer that wraps `addEventListener`.
+ */
+class PolyfillTestingShim extends EventTarget implements ModelContextTesting {
+  private context: StrictWebMCPContext;
+  private _ontoolchange: ((this: ModelContextTesting, ev: Event) => unknown) | null = null;
+
+  constructor(context: StrictWebMCPContext) {
+    super();
+    this.context = context;
+  }
+
+  listTools(): ModelContextTestingToolInfo[] {
+    return this.context.getToolInfos();
+  }
+
+  executeTool(
+    toolName: string,
+    inputArgsJson: string,
+    options?: ModelContextTestingExecuteToolOptions
+  ): Promise<string | null> {
+    return this.context.executeToolForTesting(toolName, inputArgsJson, options);
+  }
+
+  getCrossDocumentScriptToolResult(): Promise<string> {
+    return Promise.resolve('[]');
+  }
+
+  get ontoolchange(): ((this: ModelContextTesting, ev: Event) => unknown) | null {
+    return this._ontoolchange;
+  }
+
+  set ontoolchange(handler: ((this: ModelContextTesting, ev: Event) => unknown) | null) {
+    this._ontoolchange = handler;
+  }
+
+  /**
+   * @deprecated Use `addEventListener('toolchange', callback)` instead.
+   * Kept for backward compatibility with older polyfill consumers.
+   */
+  registerToolsChangedCallback(callback: () => void): void {
+    if (typeof callback !== 'function') {
+      throw new TypeError(
+        "Failed to execute 'registerToolsChangedCallback' on 'ModelContextTesting': parameter 1 is not of type 'Function'."
+      );
+    }
+    this.addEventListener('toolchange', callback);
+  }
+
+  /** @internal Called by StrictWebMCPContext when tools change. */
+  dispatchToolChange(): void {
+    const event = new Event('toolchange');
+    try {
+      this._ontoolchange?.call(this, event);
+    } catch (error) {
+      console.warn('[WebMCPPolyfill] ontoolchange handler threw:', error);
+    }
+    this.dispatchEvent(event);
   }
 }
 

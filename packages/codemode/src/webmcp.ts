@@ -6,15 +6,18 @@ import type {
   JsonSchemaToolDescriptor,
   JsonSchemaToolDescriptors,
 } from './json-schema-types';
-import { createCodeTool, type CreateCodeToolOptions } from './tool';
+import { generateTypesFromJsonSchema as generateJsonSchemaTypes } from './json-schema-types';
 import type { CodeNormalizer } from './normalize';
+import { createCodeTool, renderCodeToolDescription, type CreateCodeToolOptions } from './tool';
 import type { Executor } from './types';
 import type { UnknownRecord } from './type-utils';
+import { escapeJsDoc, sanitizeToolName } from './utils';
 
 export interface CreateCodeToolFromModelContextTestingOptions {
   modelContextTesting: Pick<ModelContextTesting, 'listTools' | 'executeTool'>;
   executor: Executor;
   description?: string;
+  maxDescriptionLength?: number;
   normalizeCode?: CodeNormalizer;
 }
 
@@ -75,10 +78,119 @@ function parseTestingResult(serialized: string | null): unknown {
   if (serialized == null) return null;
 
   try {
-    return JSON.parse(serialized);
+    const parsed = JSON.parse(serialized) as
+      | {
+          structuredContent?: unknown;
+          content?: Array<{ type?: string; text?: string }>;
+        }
+      | unknown;
+
+    if (parsed && typeof parsed === 'object') {
+      const toolResponse = parsed as {
+        structuredContent?: unknown;
+        content?: Array<{ type?: string; text?: string }>;
+      };
+
+      if ('structuredContent' in toolResponse && toolResponse.structuredContent != null) {
+        return toolResponse.structuredContent;
+      }
+
+      if (Array.isArray(toolResponse.content)) {
+        const textBlock = toolResponse.content.find((block) => block?.type === 'text');
+        if (typeof textBlock?.text === 'string') {
+          try {
+            return JSON.parse(textBlock.text);
+          } catch {
+            return textBlock.text;
+          }
+        }
+      }
+    }
+
+    return parsed;
   } catch {
     return serialized;
   }
+}
+
+function buildCompactTypeBlock(tools: JsonSchemaToolDescriptors, omittedToolCount = 0): string {
+  const lines = ['declare const codemode: {'];
+
+  for (const [toolName, descriptor] of Object.entries(tools)) {
+    const description = descriptor.description?.trim()
+      ? escapeJsDoc(descriptor.description.trim().replace(/\r?\n/g, ' '))
+      : escapeJsDoc(toolName);
+    lines.push(`  /** ${description} */`);
+    lines.push(
+      `  ${sanitizeToolName(toolName)}: (input: Record<string, unknown>) => Promise<unknown>;`
+    );
+  }
+
+  if (omittedToolCount > 0) {
+    lines.push(
+      `  /** ${omittedToolCount} more tool${omittedToolCount === 1 ? '' : 's'} omitted */`
+    );
+  }
+
+  lines.push('}');
+  return lines.join('\n');
+}
+
+function buildLimitedTypeBlock(
+  tools: JsonSchemaToolDescriptors,
+  descriptionTemplate: string | undefined,
+  maxDescriptionLength: number
+): string {
+  const fitsWithinLimit = (types: string): boolean =>
+    renderCodeToolDescription(types, descriptionTemplate).length <= maxDescriptionLength;
+
+  const fullTypes = generateJsonSchemaTypes(tools);
+  if (fitsWithinLimit(fullTypes)) {
+    return fullTypes;
+  }
+
+  const compactTypes = buildCompactTypeBlock(tools);
+  if (fitsWithinLimit(compactTypes)) {
+    return compactTypes;
+  }
+
+  const entries = Object.entries(tools);
+  for (let includedCount = entries.length - 1; includedCount >= 0; includedCount--) {
+    const includedTools = Object.fromEntries(entries.slice(0, includedCount));
+    const candidate = buildCompactTypeBlock(includedTools, entries.length - includedCount);
+    if (fitsWithinLimit(candidate)) {
+      return candidate;
+    }
+  }
+
+  return buildCompactTypeBlock({}, entries.length);
+}
+
+function buildCreateCodeToolOptions(
+  options: CreateCodeToolFromModelContextTestingOptions
+): CreateCodeToolOptions {
+  const tools = modelContextTestingToCodemodeTools(options.modelContextTesting);
+  const createOptions: CreateCodeToolOptions = {
+    tools,
+    executor: options.executor,
+  };
+
+  if (options.maxDescriptionLength !== undefined) {
+    const limitedTypes = buildLimitedTypeBlock(
+      tools,
+      options.description,
+      options.maxDescriptionLength
+    );
+    createOptions.description = renderCodeToolDescription(limitedTypes, options.description);
+  } else if (options.description !== undefined) {
+    createOptions.description = options.description;
+  }
+
+  if (options.normalizeCode !== undefined) {
+    createOptions.normalizeCode = options.normalizeCode;
+  }
+
+  return createOptions;
 }
 
 /**
@@ -118,16 +230,23 @@ export function modelContextTestingToCodemodeTools(
 export function createCodeToolFromModelContextTesting(
   options: CreateCodeToolFromModelContextTestingOptions
 ): ReturnType<typeof createCodeTool> {
-  const createOptions: CreateCodeToolOptions = {
-    tools: modelContextTestingToCodemodeTools(options.modelContextTesting),
-    executor: options.executor,
-  };
-  if (options.description !== undefined) {
-    createOptions.description = options.description;
-  }
-  if (options.normalizeCode !== undefined) {
-    createOptions.normalizeCode = options.normalizeCode;
-  }
+  const buildCurrentTool = (): ReturnType<typeof createCodeTool> =>
+    createCodeTool(buildCreateCodeToolOptions(options));
+  const liveTool = buildCurrentTool();
 
-  return createCodeTool(createOptions);
+  Object.defineProperty(liveTool, 'description', {
+    configurable: true,
+    enumerable: true,
+    get: () => buildCurrentTool().description,
+  });
+
+  liveTool.execute = (...args: Parameters<NonNullable<(typeof liveTool)['execute']>>) => {
+    const execute = buildCurrentTool().execute;
+    if (!execute) {
+      throw new Error('Codemode tool execute handler is unavailable');
+    }
+    return execute(...args);
+  };
+
+  return liveTool;
 }

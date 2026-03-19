@@ -126,7 +126,7 @@ export interface ToolDescriptor<
   /**
    * Optional schema describing output payload shape.
    */
-  outputSchema?: InputSchema;
+  outputSchema?: JsonSchemaForInference;
 
   /**
    * Optional behavior hints for LLM planners.
@@ -227,7 +227,7 @@ export interface ToolListItem<TName extends string = string> {
   /**
    * Optional JSON Schema describing output payload shape.
    */
-  outputSchema?: InputSchema;
+  outputSchema?: JsonSchemaForInference;
 
   /**
    * Optional behavior hints for LLM planners.

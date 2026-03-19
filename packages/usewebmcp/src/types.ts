@@ -299,7 +299,10 @@ export type WebMCPConfig<
  * @template TOutputSchema - JSON Schema defining output structure
  * @public
  */
-export interface WebMCPReturn<TOutputSchema extends JsonSchemaForInference | undefined = undefined> {
+export interface WebMCPReturn<
+  TOutputSchema extends JsonSchemaForInference | undefined = undefined,
+  TInputSchema extends ToolInputSchema = InputSchema,
+> {
   /**
    * Current execution state including loading status, results, and errors.
    * See {@link ToolExecutionState} for details.
@@ -314,7 +317,7 @@ export interface WebMCPReturn<TOutputSchema extends JsonSchemaForInference | und
    * @returns Promise resolving to the tool's output
    * @throws Error if validation fails or tool implementation throws
    */
-  execute: (input: unknown) => Promise<InferOutput<TOutputSchema>>;
+  execute: (input: InferToolInput<TInputSchema>) => Promise<InferOutput<TOutputSchema>>;
 
   /**
    * Reset the execution state to its initial values.

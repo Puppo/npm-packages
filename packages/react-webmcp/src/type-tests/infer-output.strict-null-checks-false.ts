@@ -58,6 +58,17 @@ type UnstructuredLastResult = WebMCPReturn['state']['lastResult'];
 type UnstructuredLastResultIsUnknown = Assert<IsEqual<UnstructuredLastResult, unknown | null>>;
 type UnstructuredExecuteResult = Awaited<ReturnType<WebMCPReturn['execute']>>;
 type UnstructuredExecuteResultIsUnknown = Assert<IsEqual<UnstructuredExecuteResult, unknown>>;
+
+type QueryInputSchema = {
+  type: 'object';
+  properties: {
+    query: { type: 'string' };
+  };
+  required: ['query'];
+};
+
+type TypedExecuteInput = Parameters<WebMCPReturn<undefined, QueryInputSchema>['execute']>[0];
+type TypedExecuteInputIsInferred = Assert<IsEqual<TypedExecuteInput, { query: string }>>;
 type UnstructuredHandlerResult = Awaited<ReturnType<typeof unstructuredConfig.handler>>;
 type UnstructuredHandlerHasTotal = Assert<
   UnstructuredHandlerResult extends { total: number } ? true : false
@@ -94,6 +105,7 @@ export const stringHandlerWithoutOutputSchema: HandlerWithoutOutputSchema = asyn
 export const typeRegressionAssertion: UndefinedFallsBackToUnknown = true;
 export const unstructuredLastResultAssertion: UnstructuredLastResultIsUnknown = true;
 export const unstructuredExecuteAssertion: UnstructuredExecuteResultIsUnknown = true;
+export const typedExecuteInputAssertion: TypedExecuteInputIsInferred = true;
 export const unstructuredHandlerAssertion: UnstructuredHandlerHasTotal = true;
 export const noSchemaStringAssertion: NoSchemaStringIsString = true;
 export const zodOutputAssertion: ZodOutputNameIsString = true;
@@ -130,7 +142,10 @@ const objectOutputConfig = {
     required: ['total'],
   } as const,
   handler: async () => ({ total: 1 }),
-} satisfies WebMCPConfig<InputSchema, { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }>;
+} satisfies WebMCPConfig<
+  InputSchema,
+  { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }
+>;
 
 const invalidObjectOutputConfig = {
   name: 'invalid_object_result',
@@ -142,10 +157,12 @@ const invalidObjectOutputConfig = {
   } as const,
   // @ts-expect-error - object output schema requires object-shaped handler result
   handler: async () => 'wrong',
-} satisfies WebMCPConfig<InputSchema, { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }>;
+} satisfies WebMCPConfig<
+  InputSchema,
+  { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }
+>;
 
 void objectOutputConfig;
 void invalidObjectOutputConfig;
 export const primitiveOutputAssertion: PrimitiveOutputIsString = true;
 export const arrayOutputAssertion: ArrayOutputIsNumberArray = true;
-

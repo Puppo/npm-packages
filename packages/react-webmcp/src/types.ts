@@ -287,6 +287,7 @@ export interface WebMCPConfig<
  */
 export interface WebMCPReturn<
   TOutputSchema extends ReactWebMCPOutputSchema | undefined = undefined,
+  TInputSchema extends ReactWebMCPInputSchema = InputSchema,
 > {
   /**
    * Current execution state including loading status, results, and errors.
@@ -302,7 +303,7 @@ export interface WebMCPReturn<
    * @returns Promise resolving to the tool's output
    * @throws Error if validation fails or handler throws
    */
-  execute: (input: unknown) => Promise<InferOutput<TOutputSchema>>;
+  execute: (input: InferToolInput<TInputSchema>) => Promise<InferOutput<TOutputSchema>>;
 
   /**
    * Reset the execution state to its initial values.

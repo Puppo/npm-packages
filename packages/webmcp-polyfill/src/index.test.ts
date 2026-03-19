@@ -201,11 +201,11 @@ describe('@mcp-b/webmcp-polyfill', () => {
     }
   });
 
-  it('fires registerToolsChangedCallback for registry mutations', async () => {
+  it('fires toolchange event for registry mutations', async () => {
     initializeWebMCPPolyfill();
 
     let count = 0;
-    navigator.modelContextTesting?.registerToolsChangedCallback(() => {
+    navigator.modelContextTesting?.addEventListener('toolchange', () => {
       count += 1;
     });
 
@@ -1509,13 +1509,20 @@ describe('@mcp-b/webmcp-polyfill', () => {
       expect(parsed.structuredContent).toBeUndefined();
     });
 
-    it('registerToolsChangedCallback throws when callback is not a function', () => {
+    it('ontoolchange handler is called on tool changes', async () => {
       initializeWebMCPPolyfill();
-      expect(() =>
-        navigator.modelContextTesting?.registerToolsChangedCallback(
-          'not-function' as unknown as () => void
-        )
-      ).toThrow("parameter 1 is not of type 'Function'");
+      let called = false;
+      navigator.modelContextTesting!.ontoolchange = () => {
+        called = true;
+      };
+      navigator.modelContext.registerTool({
+        name: 'ontoolchange_test',
+        description: 'test',
+        execute: async () => 'ok',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(called).toBe(true);
     });
 
     it('getCrossDocumentScriptToolResult returns empty array string', async () => {
@@ -1840,12 +1847,12 @@ describe('@mcp-b/webmcp-polyfill', () => {
   // =========================================================================
 
   describe('notifyToolsChanged edge cases', () => {
-    it('does not throw when callback errors are swallowed', async () => {
+    it('does not throw when ontoolchange handler errors are swallowed', async () => {
       initializeWebMCPPolyfill();
 
-      navigator.modelContextTesting?.registerToolsChangedCallback(() => {
-        throw new Error('Callback error');
-      });
+      navigator.modelContextTesting!.ontoolchange = () => {
+        throw new Error('Handler error');
+      };
 
       // Should not throw even though callback throws
       navigator.modelContext.registerTool({

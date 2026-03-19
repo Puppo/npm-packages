@@ -647,8 +647,6 @@ describe('useWebMCP', () => {
       ).rejects.toThrow();
     });
 
-    
-
     it('should allow primitive structured outputs when outputSchema is primitive', async () => {
       await renderHook(() =>
         useWebMCP({

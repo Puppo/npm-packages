@@ -17,6 +17,7 @@ import type {
   ToolListItem,
   ToolResultFromOutputSchema,
 } from './tool.js';
+import type { JsonSchemaForInference } from './json-schema.js';
 
 test('ToolDescriptor has required fields', () => {
   expectTypeOf<ToolDescriptor>().toHaveProperty('name');
@@ -117,9 +118,9 @@ test('ToolDescriptor.inputSchema supports InputSchema', () => {
   expectTypeOf<ToolDescriptor['inputSchema']>().toEqualTypeOf<InputSchema | undefined>();
 });
 
-test('ToolDescriptor.outputSchema supports InputSchema', () => {
+test('ToolDescriptor.outputSchema supports inferable JSON Schema', () => {
   expectTypeOf<ToolDescriptor>().toHaveProperty('outputSchema');
-  expectTypeOf<Required<ToolDescriptor>['outputSchema']>().toEqualTypeOf<InputSchema>();
+  expectTypeOf<Required<ToolDescriptor>['outputSchema']>().toEqualTypeOf<JsonSchemaForInference>();
 });
 
 test('ToolResultFromOutputSchema infers structuredContent for object output schemas', () => {

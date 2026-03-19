@@ -48,6 +48,17 @@ type NoSchemaLastResultIsUnknown = Assert<IsEqual<NoSchemaLastResult, unknown | 
 type NoSchemaExecuteResult = Awaited<ReturnType<WebMCPReturn['execute']>>;
 type NoSchemaExecuteResultIsUnknown = Assert<IsEqual<NoSchemaExecuteResult, unknown>>;
 
+type QueryInputSchema = {
+  type: 'object';
+  properties: {
+    query: { type: 'string' };
+  };
+  required: ['query'];
+};
+
+type TypedExecuteInput = Parameters<WebMCPReturn<undefined, QueryInputSchema>['execute']>[0];
+type TypedExecuteInputIsInferred = Assert<IsEqual<TypedExecuteInput, { query: string }>>;
+
 type NoSchemaObjectResult = Awaited<ReturnType<typeof noSchemaObjectConfig.handler>>;
 type NoSchemaObjectHasTotal = Assert<NoSchemaObjectResult extends { total: number } ? true : false>;
 
@@ -76,6 +87,7 @@ export const jsonTotal: number = jsonOutput.total;
 export const typeRegressionAssertion: UndefinedFallsBackToUnknown = true;
 export const noSchemaLastResultAssertion: NoSchemaLastResultIsUnknown = true;
 export const noSchemaExecuteAssertion: NoSchemaExecuteResultIsUnknown = true;
+export const typedExecuteInputAssertion: TypedExecuteInputIsInferred = true;
 export const noSchemaObjectAssertion: NoSchemaObjectHasTotal = true;
 export const noSchemaStringAssertion: NoSchemaStringIsString = true;
 export const jsonOutputAssertion: JsonOutputIsTyped = true;
@@ -110,7 +122,10 @@ const objectOutputConfig = {
     required: ['total'],
   } as const,
   handler: async () => ({ total: 1 }),
-} satisfies WebMCPConfig<InputSchema, { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }>;
+} satisfies WebMCPConfig<
+  InputSchema,
+  { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }
+>;
 
 const invalidObjectOutputConfig = {
   name: 'invalid_object_result',
@@ -122,10 +137,12 @@ const invalidObjectOutputConfig = {
   } as const,
   // @ts-expect-error - object output schema requires object-shaped handler result
   handler: async () => 'wrong',
-} satisfies WebMCPConfig<InputSchema, { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }>;
+} satisfies WebMCPConfig<
+  InputSchema,
+  { type: 'object'; properties: { total: { type: 'number' } }; required: ['total'] }
+>;
 
 void objectOutputConfig;
 void invalidObjectOutputConfig;
 export const primitiveOutputAssertion: PrimitiveOutputIsString = true;
 export const arrayOutputAssertion: ArrayOutputIsNumberArray = true;
-

@@ -408,8 +408,6 @@ describe('useWebMCP', () => {
       ).rejects.toThrow();
     });
 
-    
-
     it('should allow primitive outputs when outputSchema is primitive', async () => {
       await renderHook(() =>
         useWebMCP({
