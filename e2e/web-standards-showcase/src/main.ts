@@ -77,9 +77,9 @@ function init(): void {
   }
 
   // Get API references
-  modelContext = navigator.modelContext!;
+  modelContext = navigator.modelContext as ModelContext;
   installLegacyContextCompat(modelContext);
-  modelContextTesting = navigator.modelContextTesting!;
+  modelContextTesting = navigator.modelContextTesting as unknown as ModelContextTesting;
 
   // Initialize UI managers
   eventLog = new EventLog('event-log');
@@ -289,7 +289,7 @@ function updateReactToolExecutor(tools: ToolInfo[]): void {
     eventLog.info(`Executing "${toolName}"`, argsJson);
     const result = await modelContextTesting.executeTool(toolName, argsJson);
     eventLog.success(`Executed "${toolName}"`, 'Tool executed successfully');
-    return result;
+    return result ?? '';
   });
 }
 
@@ -615,7 +615,9 @@ function setMockResponse(): void {
   const toolName = tools[0].name;
   const mockResponse = 'This is a mocked response!';
 
-  modelContextTesting.setMockToolResponse(toolName, mockResponse);
+  modelContextTesting.setMockToolResponse(toolName, {
+    content: [{ type: 'text', text: mockResponse }],
+  });
 
   const result = document.getElementById('testing-result');
   if (result) {

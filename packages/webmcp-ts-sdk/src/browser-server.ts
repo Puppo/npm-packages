@@ -1,6 +1,7 @@
 import type {
   InputSchema,
   JsonObject,
+  JsonSchemaForInference,
   ModelContextClient,
   ModelContextCore,
   ModelContextExtensions,
@@ -627,7 +628,11 @@ export class BrowserMcpServer extends BaseMcpServer {
           description: tool.description ?? '',
           inputSchema: this.toTransportSchema(tool.inputSchema ?? DEFAULT_INPUT_SCHEMA),
         };
-        if (tool.outputSchema) item.outputSchema = this.toTransportSchema(tool.outputSchema, false);
+        if (tool.outputSchema)
+          item.outputSchema = this.toTransportSchema(
+            tool.outputSchema,
+            false
+          ) as JsonSchemaForInference;
         if (tool.annotations)
           item.annotations = tool.annotations as NonNullable<ToolListItem['annotations']>;
         return item;

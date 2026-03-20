@@ -76,13 +76,19 @@ const result = streamText({
 
 `createCodeToolFromModelContextTesting` reads tools from `modelContextTesting.listTools()`, converts their JSON Schema inputs into typed codemode descriptors, and wires execution through `modelContextTesting.executeTool()`. It returns a single AI SDK tool.
 
+The bridge is live rather than a one-time snapshot:
+
+- it re-reads `modelContextTesting.listTools()` when the codemode tool executes
+- its generated `description` reflects the current tool list when read
+- WebMCP `ToolResponse` wrappers are unwrapped automatically, so sandbox code gets `structuredContent` directly when available
+- if you have a very large toolset, pass `maxDescriptionLength` to cap prompt size with a compact fallback signature block
+
 The model writes code like:
 
 ```js
 async () => {
-  const total = await codemode.sumNumbers({ a: 7, b: 5 });
-  const greeting = await codemode.greetPerson({ name: 'WebMCP' });
-  return { total, greeting };
+  const collections = await codemode.listCollections({});
+  return collections.data.map((collection) => collection.name);
 };
 ```
 
@@ -200,13 +206,21 @@ const codemode = createCodeTool({
 
 The normalizer is pluggable — any `(code: string) => string` function works.
 
+## Testing
+
+`@mcp-b/codemode` has two browser-facing test layers:
+
+- `pnpm --filter @mcp-b/codemode test` runs the package-local Chromium browser suite through Vitest Browser Mode. This covers the iframe executor, worker executor, and WebMCP bridge behavior in a real browser context.
+- `pnpm --filter @mcp-b/codemode test:e2e` runs the shared Playwright page flow at `e2e/tests/codemode-webmcp.spec.ts` in Chromium and records whether the page resolved to the native `navigator.modelContextTesting` surface or the local polyfill/runtime path.
+- `pnpm --filter @mcp-b/codemode test:e2e:beta` runs that same Playwright codemode flow against Chrome Beta with `--enable-experimental-web-platform-features --enable-features=WebMCPTesting` and asserts the native `navigator.modelContextTesting` path.
+
 ## WebMCP utilities
 
 `@mcp-b/codemode/webmcp` exports three functions at different abstraction levels:
 
 | Function                                         | What it does                                                                 |
 | ------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `createCodeToolFromModelContextTesting(options)` | Reads tools, builds descriptors, returns an AI SDK tool                      |
+| `createCodeToolFromModelContextTesting(options)` | Builds a live AI SDK tool from the current `modelContextTesting` tool list   |
 | `modelContextTestingToCodemodeTools(testing)`    | Converts `modelContextTesting` into executable codemode descriptors          |
 | `webmcpToolsToCodemode(tools)`                   | Converts `ToolListItem[]` into JSON Schema descriptors (no execute handlers) |
 
@@ -239,12 +253,13 @@ Returns an AI SDK `Tool`. Import from `@mcp-b/codemode/ai`.
 
 Returns an AI SDK `Tool`. Import from `@mcp-b/codemode/webmcp`.
 
-| Option                | Type                                                      | Default        | Description                |
-| --------------------- | --------------------------------------------------------- | -------------- | -------------------------- |
-| `modelContextTesting` | `Pick<ModelContextTesting, 'listTools' \| 'executeTool'>` | required       | The testing API            |
-| `executor`            | `Executor`                                                | required       | Sandbox for generated code |
-| `description`         | `string`                                                  | auto-generated | Custom description         |
-| `normalizeCode`       | `(code: string) => string`                                | built-in regex | Code normalizer            |
+| Option                 | Type                                                      | Default        | Description                |
+| ---------------------- | --------------------------------------------------------- | -------------- | -------------------------- |
+| `modelContextTesting`  | `Pick<ModelContextTesting, 'listTools' \| 'executeTool'>` | required       | The testing API            |
+| `executor`             | `Executor`                                                | required       | Sandbox for generated code |
+| `description`          | `string`                                                  | auto-generated | Custom description         |
+| `maxDescriptionLength` | `number`                                                  | uncapped       | Cap generated descriptions |
+| `normalizeCode`        | `(code: string) => string`                                | built-in regex | Code normalizer            |
 
 ### `generateTypes(tools)`
 
@@ -257,5 +272,6 @@ Converts tool names into valid JavaScript identifiers: `get-weather` becomes `ge
 ## Current limitations
 
 - `modelContextTesting` exposes `inputSchema` but not always `outputSchema` — output types default to `unknown`
+- `createCodeToolFromModelContextTesting()` refreshes tools lazily on `description` reads and `execute()` calls rather than subscribing to WebMCP change events
 - Browser sandboxing (iframe `sandbox` + CSP, or Worker global scrubbing) provides practical isolation, not a hardened VM
 - JavaScript execution only

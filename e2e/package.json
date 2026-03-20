@@ -11,6 +11,8 @@
     "test:chrome-beta:webmcp:ui": "playwright test --config=playwright-chrome-beta-webmcp.config.ts --ui",
     "test:chromium-native-api": "playwright test tests/chromium-native-api.spec.ts",
     "test:codegen": "playwright codegen http://localhost:5173",
+    "test:codemode:webmcp": "playwright test tests/codemode-webmcp.spec.ts",
+    "test:codemode:webmcp:beta": "playwright test --config=playwright-chrome-beta-webmcp.config.ts tests/codemode-webmcp.spec.ts",
     "test:debug": "playwright test --debug",
     "test:headed": "playwright test --headed",
     "test:integration:frameworks": "playwright test --config=playwright-react-webmcp.config.ts && playwright test --config=playwright-validation-matrix.config.ts && playwright test --config=playwright-react-webmcp-prod.config.ts",

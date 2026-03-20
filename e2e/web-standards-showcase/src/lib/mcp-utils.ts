@@ -2,18 +2,7 @@
  * Utilities for working with MCP (Model Context Protocol) responses
  */
 
-/**
- * MCP tool response format
- */
-export type McpToolResponse = {
-  content?: Array<{
-    type: string;
-    text?: string;
-    [key: string]: unknown;
-  }>;
-  isError?: boolean;
-  [key: string]: unknown;
-};
+import type { CallToolResult } from '@mcp-b/webmcp-types';
 
 /**
  * Formatted result with extracted display text and error status
@@ -61,14 +50,14 @@ export function formatMcpResult(result: unknown): FormattedMcpResult {
   }
 
   // Type guard for MCP response
-  const mcpResponse = result as McpToolResponse;
+  const mcpResponse = result as CallToolResult;
   const isError = Boolean(mcpResponse.isError);
 
   // Extract text content from content array
   if (mcpResponse.content && Array.isArray(mcpResponse.content)) {
     const textContent = mcpResponse.content
-      .filter((item) => item.type === 'text' && item.text)
-      .map((item) => item.text)
+      .filter((item) => item.type === 'text' && 'text' in item && item.text)
+      .map((item) => ('text' in item ? (item as { text: string }).text : ''))
       .join('\n');
 
     if (textContent) {
@@ -105,7 +94,7 @@ export function formatMcpResult(result: unknown): FormattedMcpResult {
 /**
  * Check if a result looks like an MCP tool response
  */
-export function isMcpToolResponse(result: unknown): result is McpToolResponse {
+export function isMcpToolResponse(result: unknown): result is CallToolResult {
   if (typeof result !== 'object' || result === null) {
     return false;
   }

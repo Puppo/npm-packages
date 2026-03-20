@@ -10,7 +10,11 @@ const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === '1';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/chrome-beta-webmcp.spec.ts', '**/runtime-contract-native.spec.ts'],
+  testMatch: [
+    '**/chrome-beta-webmcp.spec.ts',
+    '**/codemode-webmcp.spec.ts',
+    '**/runtime-contract-native.spec.ts',
+  ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -194,9 +194,9 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     expect(hasMethod).toBe(true);
   });
 
-  test('should have registerToolsChangedCallback method available', async ({ page }) => {
+  test('should have addEventListener method available', async ({ page }) => {
     const hasMethod = await page.evaluate(() => {
-      return typeof navigator.modelContextTesting?.registerToolsChangedCallback === 'function';
+      return typeof navigator.modelContextTesting?.addEventListener === 'function';
     });
     expect(hasMethod).toBe(true);
   });
@@ -309,7 +309,7 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     expect(() => JSON.parse(firstTool.inputSchema)).not.toThrow();
   });
 
-  test('should registerToolsChangedCallback fire on registerTool', async ({ page }) => {
+  test('should toolchange event fire on registerTool', async ({ page }) => {
     await page.click('#chromium-test-callback-register');
     await page.waitForTimeout(500);
 
@@ -326,7 +326,7 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     );
   });
 
-  test('should registerToolsChangedCallback fire on unregisterTool', async ({ page }) => {
+  test('should toolchange event fire on unregisterTool', async ({ page }) => {
     // First register a tool
     await page.click('#register-dynamic');
     await page.waitForTimeout(500);
@@ -348,7 +348,7 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     );
   });
 
-  test('should registerToolsChangedCallback fire on provideContext', async ({ page }) => {
+  test('should toolchange event fire on provideContext', async ({ page }) => {
     await page.click('#chromium-test-callback-provide');
     await page.waitForTimeout(500);
 
@@ -365,7 +365,7 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     );
   });
 
-  test('should registerToolsChangedCallback fire on clearContext', async ({ page }) => {
+  test('should toolchange event fire on clearContext', async ({ page }) => {
     await page.click('#chromium-test-callback-clear');
     await page.waitForTimeout(500);
 
@@ -382,7 +382,7 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
     );
   });
 
-  test('should registerToolsChangedCallback replace prior callback', async ({ page }) => {
+  test('should toolchange event support multiple listeners', async ({ page }) => {
     const callbackCounts = await page.evaluate(() => {
       const testingAPI = navigator.modelContextTesting;
       if (!testingAPI) return { first: 0, second: 0 };
@@ -396,8 +396,8 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
         second++;
       };
 
-      testingAPI.registerToolsChangedCallback(callback1);
-      testingAPI.registerToolsChangedCallback(callback2);
+      testingAPI.addEventListener('toolchange', callback1);
+      testingAPI.addEventListener('toolchange', callback2);
 
       // Trigger a change
       navigator.modelContext.registerTool({
@@ -412,25 +412,25 @@ test.describe('Chromium Native API - ModelContextTesting', () => {
       return { first, second };
     });
 
-    // Chromium early preview uses replacement semantics (latest callback wins).
-    expect(callbackCounts.first).toBe(0);
+    // addEventListener adds listeners — both should fire.
+    expect(callbackCounts.first).toBe(1);
     expect(callbackCounts.second).toBe(1);
   });
 
-  test('should registerToolsChangedCallback not break on callback error', async ({ page }) => {
+  test('should toolchange event not break on listener error', async ({ page }) => {
     const secondCallbackFired = await page.evaluate(() => {
       const testingAPI = navigator.modelContextTesting;
       if (!testingAPI) return false;
 
       let secondCalled = false;
 
-      // First callback throws
-      testingAPI.registerToolsChangedCallback(() => {
+      // First listener throws
+      testingAPI.addEventListener('toolchange', () => {
         throw new Error('Test error');
       });
 
-      // Second callback should still fire
-      testingAPI.registerToolsChangedCallback(() => {
+      // Second listener should still fire
+      testingAPI.addEventListener('toolchange', () => {
         secondCalled = true;
       });
 
@@ -493,7 +493,7 @@ test.describe('Chromium Native API - Integration Tests', () => {
 
       const ops: string[] = [];
 
-      testingAPI.registerToolsChangedCallback(() => {
+      testingAPI.addEventListener('toolchange', () => {
         const tools = testingAPI.listTools();
         ops.push(`Changed: ${tools.length} tools`);
       });
@@ -561,7 +561,7 @@ test.describe('Chromium Native API - Integration Tests', () => {
       }
 
       // Check ModelContextTesting methods (Chromium native)
-      const testingMethods = ['executeTool', 'listTools', 'registerToolsChangedCallback'];
+      const testingMethods = ['executeTool', 'listTools', 'addEventListener'];
 
       for (const method of testingMethods) {
         if (

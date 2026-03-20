@@ -36,7 +36,7 @@ export type ModelContextOptions = ModelContextInput;
 export interface ModelContextTestingToolInfo {
   name: string;
   description: string;
-  inputSchema?: string;
+  inputSchema: string;
 }
 
 /**
@@ -47,23 +47,31 @@ export interface ModelContextTestingExecuteToolOptions {
 }
 
 /**
- * Chromium early-preview testing API on navigator.modelContextTesting.
+ * Chromium testing API on navigator.modelContextTesting.
+ *
+ * The native runtime extends EventTarget and fires `toolchange` events.
  */
-export interface ModelContextTesting {
+export interface ModelContextTesting extends EventTarget {
   listTools(): ModelContextTestingToolInfo[];
   executeTool(
     toolName: string,
     inputArgsJson: string,
     options?: ModelContextTestingExecuteToolOptions
   ): Promise<string | null>;
-  registerToolsChangedCallback(callback: () => void): void;
   getCrossDocumentScriptToolResult(): Promise<string>;
+  ontoolchange: ((this: ModelContextTesting, ev: Event) => unknown) | null;
 }
 
 /**
  * Polyfill-only testing extensions layered on top of ModelContextTesting.
  */
 export interface ModelContextTestingPolyfillExtensions {
+  /**
+   * Registers a callback invoked when the tool list changes.
+   * @deprecated Use `addEventListener('toolchange', ...)` on native runtimes.
+   * Kept for polyfill backward compatibility.
+   */
+  registerToolsChangedCallback(callback: () => void): void;
   getToolCalls(): Array<{
     toolName: string;
     arguments: Record<string, unknown>;
@@ -298,7 +306,7 @@ export interface ModelContextExtensions {
    * Adds a listener for tool list changes.
    */
   addEventListener(
-    type: 'toolschanged',
+    type: 'toolchange',
     listener: () => void,
     options?: boolean | AddEventListenerOptions
   ): void;
@@ -316,7 +324,7 @@ export interface ModelContextExtensions {
    * Removes a listener for tool list changes.
    */
   removeEventListener(
-    type: 'toolschanged',
+    type: 'toolchange',
     listener: () => void,
     options?: boolean | EventListenerOptions
   ): void;

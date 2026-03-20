@@ -63,8 +63,8 @@ Repo scopes: `root`, `deps`, `release`, `ci`, `docs`, `*`
 
 `navigator.modelContext` and `navigator.modelContextTesting` are **web standard APIs** (Chromium). They are not internal to this project. Browsers that support them provide both together.
 
-- `navigator.modelContext` — the core API: `provideContext()`, `registerTool()`, `unregisterTool()`, `clearContext()`
-- `navigator.modelContextTesting` — the testing API: `listTools()`, `executeTool()`, `registerToolsChangedCallback()`
+- `navigator.modelContext` — the core API: `registerTool()`, `unregisterTool()`
+- `navigator.modelContextTesting` — the testing API (extends EventTarget): `listTools()`, `executeTool()`, `ontoolchange`, `toolchange` event
 
 ### Package Layering
 

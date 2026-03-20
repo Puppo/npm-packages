@@ -91,7 +91,7 @@ declare global {
 
     /**
      * Web Model Context testing API surface (Chromium early preview).
-     * @deprecated Prefer navigator.modelContext.callTool(...) and toolschanged events
+     * @deprecated Prefer navigator.modelContext.callTool(...) and toolchange events
      * for in-page consumers. Chromium still exposes this API for testing flows.
      */
     modelContextTesting?: ModelContextTesting;

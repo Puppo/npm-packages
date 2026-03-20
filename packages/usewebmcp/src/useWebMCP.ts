@@ -2,7 +2,8 @@ import type { ToolInputSchema } from '@mcp-b/webmcp-polyfill';
 import type {
   CallToolResult,
   InputSchema,
-  JsonSchemaObject,
+  JsonObject,
+  JsonSchemaForInference,
   ToolDescriptor,
 } from '@mcp-b/webmcp-types';
 import type { DependencyList } from 'react';
@@ -31,11 +32,65 @@ function defaultFormatOutput(output: unknown): string {
 }
 
 const TOOL_OWNER_BY_NAME = new Map<string, symbol>();
+const DEFAULT_REGISTERED_INPUT_SCHEMA: InputSchema = { type: 'object', properties: {} };
+const STANDARD_JSON_SCHEMA_TARGETS = ['draft-2020-12', 'draft-07'] as const;
 type StructuredContent = Exclude<CallToolResult['structuredContent'], undefined>;
-type CompatModelContext = Navigator['modelContext'] & {
-  registerTool: (tool: ToolDescriptor) => { unregister: () => void } | undefined;
-  unregisterTool: (name: string) => void;
-};
+
+function isObjectOutputSchema(schema: JsonSchemaForInference | undefined): boolean {
+  return schema?.type === 'object';
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isInputSchema(value: unknown): value is InputSchema {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  if ('type' in value && value.type !== undefined && typeof value.type !== 'string') {
+    return false;
+  }
+
+  if ('properties' in value && value.properties !== undefined && !isPlainObject(value.properties)) {
+    return false;
+  }
+
+  if (
+    'required' in value &&
+    value.required !== undefined &&
+    (!Array.isArray(value.required) || value.required.some((entry) => typeof entry !== 'string'))
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null) {
+    return true;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+
+  if (typeof value !== 'object') {
+    return false;
+  }
+
+  return Object.values(value).every(isJsonValue);
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && isJsonValue(value);
+}
 
 function toStructuredContent(value: unknown): StructuredContent | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -43,11 +98,8 @@ function toStructuredContent(value: unknown): StructuredContent | null {
   }
 
   try {
-    const normalized = JSON.parse(JSON.stringify(value)) as unknown;
-    if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
-      return null;
-    }
-    return normalized as StructuredContent;
+    const normalized = JSON.parse(JSON.stringify(value));
+    return isJsonObject(normalized) ? normalized : null;
   } catch {
     return null;
   }
@@ -56,8 +108,70 @@ function toStructuredContent(value: unknown): StructuredContent | null {
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function isDev(): boolean {
-  const env = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
+  const env = typeof process !== 'undefined' ? process.env?.NODE_ENV : undefined;
   return env !== undefined ? env !== 'production' : false;
+}
+
+function isToolRegistrationHandle(value: unknown): value is { unregister: () => void } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'unregister' in value &&
+    typeof value.unregister === 'function'
+  );
+}
+
+function registerToolWithCompatibilityHandle(
+  modelContext: Navigator['modelContext'],
+  toolDescriptor: ToolDescriptor
+): { unregister: () => void } | undefined {
+  const registration = Reflect.apply(modelContext.registerTool, modelContext, [toolDescriptor]);
+  return isToolRegistrationHandle(registration) ? registration : undefined;
+}
+
+function toRegisteredInputSchema(
+  inputSchema: ToolInputSchema | undefined
+): InputSchema | undefined {
+  if (inputSchema === undefined) {
+    return undefined;
+  }
+
+  if (!isPlainObject(inputSchema) || !('~standard' in inputSchema)) {
+    return isInputSchema(inputSchema) ? inputSchema : DEFAULT_REGISTERED_INPUT_SCHEMA;
+  }
+
+  const standard = inputSchema['~standard'];
+  if (!isPlainObject(standard)) {
+    return DEFAULT_REGISTERED_INPUT_SCHEMA;
+  }
+
+  const jsonSchema = standard.jsonSchema;
+  if (!isPlainObject(jsonSchema) || typeof jsonSchema.input !== 'function') {
+    return DEFAULT_REGISTERED_INPUT_SCHEMA;
+  }
+
+  for (const target of STANDARD_JSON_SCHEMA_TARGETS) {
+    try {
+      const converted = jsonSchema.input({ target });
+      if (isInputSchema(converted)) {
+        return converted;
+      }
+    } catch {
+      // Try the next target before falling back to the default registration schema.
+    }
+  }
+
+  return DEFAULT_REGISTERED_INPUT_SCHEMA;
+}
+
+function toRegisteredOutputSchema(
+  outputSchema: JsonSchemaForInference | undefined
+): JsonSchemaForInference | undefined {
+  if (outputSchema === undefined) {
+    return undefined;
+  }
+
+  return outputSchema;
 }
 
 /**
@@ -126,7 +240,7 @@ function isDev(): boolean {
  * ```
  *
  * @template TInputSchema - JSON Schema defining input parameter types (use `as const` for inference)
- * @template TOutputSchema - JSON Schema object defining output structure (enables structuredContent)
+ * @template TOutputSchema - JSON Schema defining output structure (object schemas enable structuredContent)
  *
  * @param config - Configuration object for the tool
  * @param deps - Optional dependency array that triggers tool re-registration when values change.
@@ -166,11 +280,11 @@ function isDev(): boolean {
  */
 export function useWebMCP<
   TInputSchema extends ToolInputSchema = InputSchema,
-  TOutputSchema extends JsonSchemaObject | undefined = undefined,
+  TOutputSchema extends JsonSchemaForInference | undefined = undefined,
 >(
   config: WebMCPConfig<TInputSchema, TOutputSchema>,
   deps?: DependencyList
-): WebMCPReturn<TOutputSchema> {
+): WebMCPReturn<TOutputSchema, TInputSchema> {
   type TOutput = InferOutput<TOutputSchema>;
   type TInput = InferToolInput<TInputSchema>;
   const {
@@ -294,7 +408,7 @@ export function useWebMCP<
    * @returns Promise resolving to the tool output
    * @throws Error if validation fails or the tool implementation throws
    */
-  const execute = useCallback(async (input: unknown): Promise<TOutput> => {
+  const execute = useCallback(async (input: TInput): Promise<TOutput> => {
     setState((prev) => ({
       ...prev,
       isExecuting: true,
@@ -302,7 +416,7 @@ export function useWebMCP<
     }));
 
     try {
-      const result = await toolExecuteRef.current(input as TInput);
+      const result = await toolExecuteRef.current(input);
 
       // Only update state if component is still mounted
       if (isMountedRef.current) {
@@ -345,7 +459,7 @@ export function useWebMCP<
   }, [execute]);
 
   const stableExecute = useCallback(
-    (input: unknown): Promise<TOutput> => executeRef.current(input),
+    (input: TInput): Promise<TOutput> => executeRef.current(input),
     []
   );
 
@@ -377,7 +491,7 @@ export function useWebMCP<
      */
     const mcpHandler = async (input: unknown): Promise<CallToolResult> => {
       try {
-        const result = await executeRef.current(input);
+        const result = await Reflect.apply(executeRef.current, undefined, [input]);
         const formattedOutput = formatOutputRef.current(result);
 
         const response: CallToolResult = {
@@ -389,7 +503,7 @@ export function useWebMCP<
           ],
         };
 
-        if (outputSchema) {
+        if (isObjectOutputSchema(outputSchema)) {
           const structuredContent = toStructuredContent(result);
           if (!structuredContent) {
             throw new Error(
@@ -416,17 +530,19 @@ export function useWebMCP<
     };
 
     const ownerToken = Symbol(name);
-    const modelContext = window.navigator.modelContext as CompatModelContext;
+    const modelContext = window.navigator.modelContext;
+    const resolvedInputSchema = toRegisteredInputSchema(inputSchema);
+    const resolvedOutputSchema = toRegisteredOutputSchema(outputSchema);
     const toolDescriptor: ToolDescriptor = {
       name,
       description,
-      ...(inputSchema && { inputSchema: inputSchema as InputSchema }),
-      ...(outputSchema && { outputSchema: outputSchema as InputSchema }),
+      ...(resolvedInputSchema && { inputSchema: resolvedInputSchema }),
+      ...(resolvedOutputSchema && { outputSchema: resolvedOutputSchema }),
       ...(annotations && { annotations }),
       execute: mcpHandler,
     };
 
-    const registration = modelContext.registerTool(toolDescriptor);
+    const registration = registerToolWithCompatibilityHandle(modelContext, toolDescriptor);
     TOOL_OWNER_BY_NAME.set(name, ownerToken);
 
     return () => {

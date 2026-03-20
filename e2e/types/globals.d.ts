@@ -1,15 +1,10 @@
 import type { ToolListItem, ToolResponse } from '@mcp-b/webmcp-types';
 
 declare module '@mcp-b/webmcp-types' {
+  // These augment ModelContextCore with BrowserMcpServer methods that exist
+  // at runtime after @mcp-b/global replaces navigator.modelContext.
+  // registerTool is NOT listed here — it already has proper overloads in the package.
   interface ModelContextCore {
-    registerTool(tool: {
-      name: string;
-      description?: string;
-      inputSchema?: unknown;
-      outputSchema?: unknown;
-      annotations?: unknown;
-      execute: (args: Record<string, unknown>, client?: unknown) => unknown | Promise<unknown>;
-    }): { unregister: () => void };
     listTools(): ToolListItem[];
     callTool(params: { name: string; arguments?: Record<string, unknown> }): Promise<ToolResponse>;
     executeTool(name: string, args?: Record<string, unknown>): Promise<ToolResponse>;
@@ -17,6 +12,8 @@ declare module '@mcp-b/webmcp-types' {
     elicitInput(params: unknown): Promise<unknown>;
   }
 
+  // These match ModelContextTestingPolyfillExtensions from the package.
+  // Augmented here so e2e tests can access them via navigator.modelContextTesting.
   interface ModelContextTesting {
     getToolCalls?(): Array<{
       toolName: string;

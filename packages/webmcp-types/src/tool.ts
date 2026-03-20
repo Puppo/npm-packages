@@ -126,7 +126,7 @@ export interface ToolDescriptor<
   /**
    * Optional schema describing output payload shape.
    */
-  outputSchema?: InputSchema;
+  outputSchema?: JsonSchemaForInference;
 
   /**
    * Optional behavior hints for LLM planners.
@@ -150,7 +150,9 @@ export interface ToolDescriptor<
 export type ToolResultFromOutputSchema<
   TOutputSchema extends JsonSchemaForInference | undefined = undefined,
 > = TOutputSchema extends JsonSchemaObject
-  ? CallToolResult & { structuredContent?: InferJsonSchema<TOutputSchema> }
+  ? Omit<CallToolResult, 'structuredContent'> & {
+      structuredContent: InferJsonSchema<TOutputSchema>;
+    }
   : CallToolResult;
 
 /**
@@ -225,7 +227,7 @@ export interface ToolListItem<TName extends string = string> {
   /**
    * Optional JSON Schema describing output payload shape.
    */
-  outputSchema?: InputSchema;
+  outputSchema?: JsonSchemaForInference;
 
   /**
    * Optional behavior hints for LLM planners.

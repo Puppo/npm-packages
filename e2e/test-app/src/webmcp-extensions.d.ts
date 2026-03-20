@@ -1,5 +1,7 @@
 import type { ToolListItem, ToolResponse } from '@mcp-b/webmcp-types';
 
+// These augment ModelContextCore with BrowserMcpServer methods that exist
+// at runtime after @mcp-b/global replaces navigator.modelContext.
 declare module '@mcp-b/webmcp-types' {
   interface ModelContextCore {
     listTools(): ToolListItem[];

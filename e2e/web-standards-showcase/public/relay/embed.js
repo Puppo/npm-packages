@@ -224,28 +224,23 @@
   }
 
   /**
-   * Subscribes to modelContext tool change events.
-   * Tries addEventListener first (future native EventTarget support),
-   * falls back to registerToolsChangedCallback on modelContextTesting.
+   * Subscribes to tool change events.
+   * Uses the testing API's toolchange event (EventTarget) which is supported
+   * by both native Chromium and the polyfill.
    */
   function subscribeToToolChanges() {
-    var mc = navigator.modelContext;
-    if (mc && typeof mc.addEventListener === 'function') {
-      try {
-        mc.addEventListener('toolschanged', onToolsChanged);
-        return;
-      } catch (_e) {
-        /* BrowserMcpServer doesn't extend EventTarget — fall through */
-      }
-    }
     var testing = navigator.modelContextTesting;
-    if (testing && typeof testing.registerToolsChangedCallback === 'function') {
+    if (testing && typeof testing.addEventListener === 'function') {
       try {
-        testing.registerToolsChangedCallback(onToolsChanged);
+        testing.addEventListener('toolchange', onToolsChanged);
+        return;
       } catch (e) {
-        console.warn('[webmcp-relay-embed] Failed to subscribe to tool changes:', e);
+        console.warn('[webmcp-relay-embed] Failed to subscribe via addEventListener:', e);
       }
     }
+    console.warn(
+      '[webmcp-relay-embed] Could not subscribe to tool changes. Dynamic tool updates will not be relayed.'
+    );
   }
 
   /**
