@@ -120,7 +120,7 @@ export const ToolExecutionPanel: FC<ToolExecutionPanelProps> = ({
           // Parse the inputSchema from JSON string
           let parsedSchema: unknown;
           try {
-            parsedSchema = JSON.parse(tool.inputSchema);
+            parsedSchema = JSON.parse(tool.inputSchema ?? '{"type":"object","properties":{}}');
           } catch (e) {
             console.error(`Failed to parse schema for tool ${tool.name}:`, e);
             parsedSchema = { type: 'object', properties: {} };
