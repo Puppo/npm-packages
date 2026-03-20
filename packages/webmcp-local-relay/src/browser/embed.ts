@@ -8,6 +8,7 @@
  * `<script src=".../embed.js" data-debug></script>`
  */
 import type {
+  ModelContextTestingPolyfillExtensions,
   ModelContextTestingToolInfo,
   ModelContextWithExtensions,
   ToolListItem,
@@ -268,13 +269,15 @@ function trySubscribe(): boolean {
   const mc = getExtendedModelContext();
   if (mc) {
     try {
-      mc.addEventListener('toolschanged', onToolsChanged);
+      mc.addEventListener('toolchange', onToolsChanged);
       return true;
     } catch (error) {
       debugWarn('addEventListener threw:', error);
     }
   }
-  const testing = navigator.modelContextTesting;
+  const testing = navigator.modelContextTesting as
+    | (typeof navigator.modelContextTesting & Partial<ModelContextTestingPolyfillExtensions>)
+    | undefined;
   if (testing && typeof testing.registerToolsChangedCallback === 'function') {
     try {
       testing.registerToolsChangedCallback(onToolsChanged);

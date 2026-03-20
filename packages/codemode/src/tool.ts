@@ -50,6 +50,13 @@ function isJsonSchemaLike(value: unknown): boolean {
   );
 }
 
+export function renderCodeToolDescription(
+  types: string,
+  description: string = DEFAULT_DESCRIPTION
+): string {
+  return description.replace('{{types}}', types);
+}
+
 export function createCodeTool(options: CreateCodeToolOptions): Tool<CodeInput, CodeOutput> {
   const tools: ToolDescriptors | JsonSchemaExecutableToolDescriptors | ToolSet = {};
   for (const [name, t] of Object.entries(options.tools)) {
@@ -62,7 +69,7 @@ export function createCodeTool(options: CreateCodeToolOptions): Tool<CodeInput, 
   const executor = options.executor;
   const normalize = options.normalizeCode ?? defaultNormalizeCode;
 
-  const description = (options.description ?? DEFAULT_DESCRIPTION).replace('{{types}}', types);
+  const description = renderCodeToolDescription(types, options.description);
 
   return tool({
     description,

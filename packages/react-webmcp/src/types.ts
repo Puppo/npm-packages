@@ -5,7 +5,7 @@ import type {
   InferArgsFromInputSchema,
   InferJsonSchema,
   InputSchema,
-  JsonSchemaObject,
+  JsonSchemaForInference,
   ToolAnnotations,
 } from '@mcp-b/webmcp-types';
 import type { z } from 'zod';
@@ -30,10 +30,10 @@ export type ReactWebMCPInputSchema = ToolInputSchema | ZodSchemaObject;
 
 /**
  * Union of all output schema types supported by react-webmcp:
- * - `JsonSchemaObject` (MCP output schema)
+ * - `JsonSchemaForInference` (MCP output schema)
  * - `ZodSchemaObject` (Zod v3 `Record<string, z.ZodTypeAny>`, converted at runtime)
  */
-export type ReactWebMCPOutputSchema = JsonSchemaObject | ZodSchemaObject;
+export type ReactWebMCPOutputSchema = JsonSchemaForInference | ZodSchemaObject;
 
 /**
  * Infers handler input type from a Standard Schema, Zod v3 schema, or JSON Schema.
@@ -63,7 +63,7 @@ export type InferToolInput<T> =
 /**
  * Utility type to infer the output type from an output schema.
  *
- * - `JsonSchemaObject` resolves via `InferJsonSchema`
+ * - inferable JSON Schema resolves via `InferJsonSchema`
  * - `ZodSchemaObject` resolves via `z.infer<z.ZodObject<...>>`
  * - `undefined` falls back to `TFallback`
  *
@@ -78,8 +78,8 @@ export type InferOutput<
   ? TFallback
   : TOutputSchema extends Record<string, z.ZodTypeAny> // Zod v3 schema object
     ? z.infer<z.ZodObject<TOutputSchema>>
-    : // JSON Schema object
-      TOutputSchema extends JsonSchemaObject
+    : // JSON Schema
+      TOutputSchema extends JsonSchemaForInference
       ? InferJsonSchema<TOutputSchema>
       : TFallback;
 
@@ -123,7 +123,7 @@ export interface ToolExecutionState<TOutput = unknown> {
  * Uses JSON Schema for type inference via `as const`.
  *
  * @template TInputSchema - JSON Schema defining input parameters
- * @template TOutputSchema - Output schema defining output structure (enables structuredContent)
+ * @template TOutputSchema - Output schema defining output structure (object schemas enable structuredContent)
  *
  * @public
  *
@@ -204,7 +204,7 @@ export interface WebMCPConfig<
 
   /**
    * **Recommended:** Output schema defining the expected output structure.
-   * Accepts either a JSON Schema object or a Zod schema map.
+   * Accepts either an inferable JSON Schema or a Zod schema map.
    *
    * When provided, this enables three key features:
    * 1. **Type Safety**: The handler's return type is inferred from this schema
@@ -287,6 +287,7 @@ export interface WebMCPConfig<
  */
 export interface WebMCPReturn<
   TOutputSchema extends ReactWebMCPOutputSchema | undefined = undefined,
+  TInputSchema extends ReactWebMCPInputSchema = InputSchema,
 > {
   /**
    * Current execution state including loading status, results, and errors.
@@ -302,7 +303,7 @@ export interface WebMCPReturn<
    * @returns Promise resolving to the tool's output
    * @throws Error if validation fails or handler throws
    */
-  execute: (input: unknown) => Promise<InferOutput<TOutputSchema>>;
+  execute: (input: InferToolInput<TInputSchema>) => Promise<InferOutput<TOutputSchema>>;
 
   /**
    * Reset the execution state to its initial values.

@@ -87,7 +87,7 @@ test.describe('Notification Batching Tests', () => {
 
       const testing = navigator.modelContextTesting;
       if (testing) {
-        testing.registerToolsChangedCallback(() => {
+        testing.addEventListener('toolchange', () => {
           notificationCount++;
         });
       }
@@ -134,7 +134,7 @@ test.describe('Notification Batching Tests', () => {
 
       const testing = navigator.modelContextTesting;
       if (testing) {
-        testing.registerToolsChangedCallback(() => {
+        testing.addEventListener('toolchange', () => {
           notificationCount++;
         });
       }
@@ -198,7 +198,7 @@ test.describe('Notification Batching Tests', () => {
 
       const testing = navigator.modelContextTesting;
       if (testing) {
-        testing.registerToolsChangedCallback(() => {
+        testing.addEventListener('toolchange', () => {
           notificationCount++;
         });
       }
@@ -255,7 +255,7 @@ test.describe('Notification Batching - Edge Cases', () => {
 
       const testing = navigator.modelContextTesting;
       if (testing) {
-        testing.registerToolsChangedCallback(() => {
+        testing.addEventListener('toolchange', () => {
           notificationCount++;
         });
       }
@@ -304,7 +304,7 @@ test.describe('Notification Batching - Edge Cases', () => {
       // Now start tracking
       const testing = navigator.modelContextTesting;
       if (testing) {
-        testing.registerToolsChangedCallback(() => {
+        testing.addEventListener('toolchange', () => {
           notificationCount++;
         });
       }

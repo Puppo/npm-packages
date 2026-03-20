@@ -1,84 +1,64 @@
 /**
- * Showcase-local types for the native Chromium Web Model Context API plus
- * the in-page compatibility helpers installed by the demo.
+ * Showcase types — thin re-exports from @mcp-b/webmcp-types with aliases
+ * that preserve the import names used throughout the app.
+ */
+
+export type {
+  InputSchema as ToolInputSchema,
+  ModelContextOptions as ProvideContextOptions,
+  ModelContextTestingToolInfo as ToolInfo,
+  ModelContextToolRegistrationHandle as ToolRegistration,
+} from '@mcp-b/webmcp-types';
+
+export type { CallToolResult } from '@mcp-b/webmcp-types';
+
+import type {
+  ModelContextCore,
+  ModelContextExtensions,
+  ModelContextTesting as PackageModelContextTesting,
+  ModelContextTestingPolyfillExtensions,
+  ModelContextToolRegistrationHandle,
+  ToolDescriptor,
+} from '@mcp-b/webmcp-types';
+
+/**
+ * Tool descriptor alias.
  *
- * The native runtime no longer exposes provideContext()/clearContext() and
- * does not return an unregister handle from registerTool(). The showcase
- * layers temporary compatibility helpers on top so the older bucket demos
- * can keep running while the upstream unregistration design is still in flux.
+ * The package `ToolDescriptor` is generic-typed; the showcase only needs the
+ * default (unparameterised) shape.
  */
-
-export interface ToolInputSchema {
-  type: 'object';
-  properties?: Record<string, unknown>;
-  required?: string[];
-}
+export type Tool = ToolDescriptor;
 
 /**
- * The Web Model Context API expects execute functions to return any value.
- * The native API will handle serialization to string for the testing API.
+ * The showcase patches the native `ModelContext` with legacy compatibility
+ * helpers via `installLegacyContextCompat` — most notably, a wrapped
+ * `registerTool` that returns a registration handle (the native API returns
+ * `void`).  The patched surface also adds `listTools()` from the MCPB
+ * extension layer and standard `EventTarget` methods for `toolschange`.
+ *
+ * This type captures the full patched surface the showcase code relies on.
  */
-export interface ToolOutputSchema {
-  type: 'object';
-  properties?: Record<string, unknown>;
-  required?: string[];
-}
+export type ModelContext = ModelContextCore & {
+  registerTool(tool: Tool): ModelContextToolRegistrationHandle;
+  listTools: ModelContextExtensions['listTools'];
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions
+  ): void;
+};
 
 /**
- * The Web Model Context API expects execute functions to return any value.
- * The native API will handle serialization to string for the testing API.
- * When outputSchema is defined, the response will include structuredContent.
+ * The showcase uses the polyfill's extended testing API surface
+ * (getToolCalls, clearToolCalls, setMockToolResponse, reset, etc.)
+ * in addition to the base ModelContextTesting methods.
  */
-export interface Tool {
-  name: string;
-  description: string;
-  inputSchema: ToolInputSchema;
-  outputSchema?: ToolOutputSchema;
-  execute: (input: Record<string, unknown>) => Promise<unknown> | unknown;
-}
+export type ModelContextTesting = PackageModelContextTesting &
+  ModelContextTestingPolyfillExtensions;
 
-export interface ToolRegistration {
-  unregister: () => void;
-}
-
-export interface ProvideContextOptions {
-  tools: Tool[];
-}
-
-export interface ModelContext extends EventTarget {
-  provideContext(options: ProvideContextOptions): void;
-  registerTool(tool: Tool): ToolRegistration;
-  listTools(): Tool[];
-  executeTool(name: string, input: Record<string, unknown>): Promise<unknown>;
-  unregisterTool(name: string): void;
-  clearContext(): void;
-}
-
-export interface ToolInfo {
-  name: string;
-  description: string;
-  inputSchema: string; // JSON string, not object!
-  outputSchema?: string; // JSON string when defined
-}
-
-export interface ModelContextTesting {
-  executeTool(toolName: string, inputArgsJson: string): Promise<string>;
-  listTools(): ToolInfo[];
-  registerToolsChangedCallback(callback: () => void): void;
-  getToolCalls(): Array<{ toolName: string; inputArgs: string; result: string }>;
-  clearToolCalls(): void;
-  setMockToolResponse(toolName: string, response: string): void;
-  clearMockToolResponse(toolName: string): void;
-  getRegisteredTools(): ToolInfo[];
-  reset(): void;
-}
-
-declare global {
-  interface Navigator {
-    modelContext?: ModelContext;
-    modelContextTesting?: ModelContextTesting;
-  }
-}
+// ============================================================================
+// App-specific types (not in packages)
+// ============================================================================
 
 export interface DetectionResult {
   available: boolean;

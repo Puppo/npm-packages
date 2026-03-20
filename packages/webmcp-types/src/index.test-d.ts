@@ -8,6 +8,7 @@ import type {
   ModelContextInput,
   ModelContextTesting,
   ModelContextTestingExecuteToolOptions,
+  ModelContextTestingPolyfillExtensions,
   ModelContextTestingToolInfo,
   ModelContextToolRegistrationHandle,
   ModelContextWithExtensions,
@@ -82,10 +83,16 @@ test('ModelContextTesting.listTools returns ModelContextTestingToolInfo[]', () =
   >();
 });
 
-test('ModelContextTesting.registerToolsChangedCallback accepts function callbacks', () => {
-  expectTypeOf<ModelContextTesting['registerToolsChangedCallback']>()
+test('ModelContextTestingPolyfillExtensions.registerToolsChangedCallback accepts function callbacks', () => {
+  expectTypeOf<ModelContextTestingPolyfillExtensions['registerToolsChangedCallback']>()
     .parameter(0)
     .toEqualTypeOf<() => void>();
+});
+
+test('ModelContextTesting.ontoolchange is nullable event handler', () => {
+  expectTypeOf<ModelContextTesting['ontoolchange']>().toEqualTypeOf<
+    ((this: ModelContextTesting, ev: Event) => unknown) | null
+  >();
 });
 
 test('ModelContextTesting.getCrossDocumentScriptToolResult returns Promise<string>', () => {

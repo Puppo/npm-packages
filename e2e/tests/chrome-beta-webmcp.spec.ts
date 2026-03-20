@@ -33,8 +33,7 @@ test.describe('Chrome Beta WebMCP Testing Flag Smoke', () => {
         hasTesting: Boolean(testing),
         hasExecuteTool: typeof testing?.executeTool === 'function',
         hasListTools: typeof testing?.listTools === 'function',
-        hasRegisterToolsChangedCallback:
-          typeof testing?.registerToolsChangedCallback === 'function',
+        hasAddEventListener: typeof testing?.addEventListener === 'function',
         hasCrossDocumentResult: typeof testing?.getCrossDocumentScriptToolResult === 'function',
         isPolyfill: testing?.__isWebMCPPolyfill === true,
       };
@@ -44,7 +43,7 @@ test.describe('Chrome Beta WebMCP Testing Flag Smoke', () => {
     expect(surface.hasTesting).toBe(true);
     expect(surface.hasExecuteTool).toBe(true);
     expect(surface.hasListTools).toBe(true);
-    expect(surface.hasRegisterToolsChangedCallback).toBe(true);
+    expect(surface.hasAddEventListener).toBe(true);
     expect(surface.isPolyfill).toBe(false);
 
     // Diagnostics only: current Chrome Beta may not yet expose this method.
@@ -472,44 +471,7 @@ test.describe('Chrome Beta WebMCP Testing Flag Smoke', () => {
     expect(result.message).toMatch(/cancelled|invocation failed/i);
   });
 
-  test('registerToolsChangedCallback rejects non-function callback inputs', async ({ page }) => {
-    const result = await page.evaluate(() => {
-      const testing = navigator.modelContextTesting;
-      if (!testing) {
-        return { missingApi: true };
-      }
-
-      const outcomes: Record<string, string> = {};
-      const run = (label: string, value: unknown) => {
-        try {
-          testing.registerToolsChangedCallback(value as () => void);
-          outcomes[label] = 'ok';
-        } catch (error) {
-          outcomes[label] = error instanceof Error ? error.name : String(error);
-        }
-      };
-
-      run('null', null);
-      run('undefined', undefined);
-      run('number', 123);
-      run('object', { cb: true });
-      run('function', () => {});
-
-      return { missingApi: false, outcomes };
-    });
-
-    expect(result.missingApi).toBe(false);
-    if (result.missingApi) {
-      throw new Error('modelContextTesting not available');
-    }
-    expect(result.outcomes?.null).toBe('TypeError');
-    expect(result.outcomes?.undefined).toBe('TypeError');
-    expect(result.outcomes?.number).toBe('TypeError');
-    expect(result.outcomes?.object).toBe('TypeError');
-    expect(result.outcomes?.function).toBe('ok');
-  });
-
-  test('registerToolsChangedCallback replaces prior callback and does not break operations when callback throws', async ({
+  test('multiple toolchange listeners all receive events and operations survive listener errors', async ({
     page,
   }) => {
     const result = await page.evaluate(async () => {
@@ -519,14 +481,14 @@ test.describe('Chrome Beta WebMCP Testing Flag Smoke', () => {
         return { missingApi: true };
       }
 
-      let replacedCount = 0;
-      let stableCount = 0;
+      let firstCount = 0;
+      let secondCount = 0;
 
-      testing.registerToolsChangedCallback(() => {
-        replacedCount += 1;
+      testing.addEventListener('toolchange', () => {
+        firstCount += 1;
       });
-      testing.registerToolsChangedCallback(() => {
-        stableCount += 1;
+      testing.addEventListener('toolchange', () => {
+        secondCount += 1;
       });
 
       const dynamicName = `beta_cb_dynamic_${Date.now()}`;
@@ -557,35 +519,36 @@ test.describe('Chrome Beta WebMCP Testing Flag Smoke', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      let throwsCallbackOperationsSucceeded = true;
-      testing.registerToolsChangedCallback(() => {
-        throw new Error('intentional callback failure');
+      let throwsListenerOperationsSucceeded = true;
+      testing.addEventListener('toolchange', () => {
+        throw new Error('intentional listener failure');
       });
       try {
         context.registerTool({
           name: `beta_cb_throw_${Date.now()}`,
-          description: 'throwing callback operation',
+          description: 'throwing listener operation',
           inputSchema: { type: 'object', properties: {} },
           async execute() {
             return { content: [{ type: 'text', text: 'ok' }] };
           },
         });
       } catch {
-        throwsCallbackOperationsSucceeded = false;
+        throwsListenerOperationsSucceeded = false;
       }
 
       return {
         missingApi: false,
-        replacedCount,
-        stableCount,
-        throwsCallbackOperationsSucceeded,
+        firstCount,
+        secondCount,
+        throwsListenerOperationsSucceeded,
       };
     });
 
     expect(result.missingApi).toBe(false);
-    expect(result.replacedCount).toBe(0);
-    expect(result.stableCount).toBeGreaterThanOrEqual(4);
-    expect(result.throwsCallbackOperationsSucceeded).toBe(true);
+    // Both listeners should fire for all 4 operations
+    expect(result.firstCount).toBeGreaterThanOrEqual(4);
+    expect(result.secondCount).toBeGreaterThanOrEqual(4);
+    expect(result.throwsListenerOperationsSucceeded).toBe(true);
   });
 
   test('getCrossDocumentScriptToolResult returns JSON string payload', async ({ page }) => {

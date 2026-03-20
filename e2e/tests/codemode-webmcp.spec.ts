@@ -8,6 +8,15 @@ test.describe('Codemode WebMCP E2E', () => {
       timeout: 15000,
     });
 
+    const runtime = await page.locator('#codemode-runtime').getAttribute('data-runtime');
+    expect(['native', 'polyfill']).toContain(runtime);
+
+    if (test.info().project.name === 'chrome-beta-webmcp') {
+      expect(runtime).toBe('native');
+    }
+
+    await expect(page.locator('#codemode-status')).toHaveAttribute('data-runtime', runtime ?? '');
+
     await expect(page.locator('#codemode-tools')).toHaveAttribute('data-count', '2');
     await expect(page.locator('#codemode-tools')).toContainText('sumNumbers');
     await expect(page.locator('#codemode-tools')).toContainText('greetPerson');

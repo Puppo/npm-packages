@@ -332,7 +332,7 @@ test.describe('Model Context Testing API Tests', () => {
       const testingAPI = navigator.modelContextTesting;
       if (!testingAPI) return [];
 
-      return ['listTools', 'executeTool', 'registerToolsChangedCallback'].filter(
+      return ['listTools', 'executeTool', 'addEventListener'].filter(
         (method) => typeof testingAPI[method as keyof typeof testingAPI] === 'function'
       );
     });
@@ -340,7 +340,7 @@ test.describe('Model Context Testing API Tests', () => {
     expect(methods).toHaveLength(3);
     expect(methods).toContain('listTools');
     expect(methods).toContain('executeTool');
-    expect(methods).toContain('registerToolsChangedCallback');
+    expect(methods).toContain('addEventListener');
   });
 
   test('should list base tools via modelContextTesting.listTools()', async ({ page }) => {
@@ -367,13 +367,13 @@ test.describe('Model Context Testing API Tests', () => {
     expect(typeof result).toBe('string');
   });
 
-  test('should fire registerToolsChangedCallback on tool registration', async ({ page }) => {
+  test('should fire toolchange event on tool registration', async ({ page }) => {
     const callbackCount = await page.evaluate(async () => {
       const testingAPI = navigator.modelContextTesting;
       if (!testingAPI) return 0;
 
       let count = 0;
-      testingAPI.registerToolsChangedCallback(() => {
+      testingAPI.addEventListener('toolchange', () => {
         count++;
       });
 

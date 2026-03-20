@@ -10,6 +10,7 @@ import type {
 type ExtendedModelContextTesting = ModelContextTesting &
   Partial<ModelContextTestingPolyfillExtensions>;
 type StructuredContent = Record<string, string | number | boolean | null>;
+type RuntimeMode = 'native' | 'polyfill';
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -33,10 +34,27 @@ function createTextResponse(text: string, structuredContent?: StructuredContent)
 }
 
 const statusEl = requireElement<HTMLDivElement>('codemode-status');
+const runtimeEl = requireElement<HTMLPreElement>('codemode-runtime');
 const toolsEl = requireElement<HTMLPreElement>('codemode-tools');
 const descriptionEl = requireElement<HTMLPreElement>('codemode-description');
 const resultEl = requireElement<HTMLPreElement>('codemode-result');
 const callsEl = requireElement<HTMLPreElement>('codemode-calls');
+
+function detectRuntimeMode(
+  modelContext: Navigator['modelContext'],
+  modelContextTesting: ExtendedModelContextTesting
+): RuntimeMode {
+  const maybePolyfillModelContext = modelContext as { __isWebMCPPolyfill?: boolean };
+  if (maybePolyfillModelContext.__isWebMCPPolyfill === true) {
+    return 'polyfill';
+  }
+
+  if (typeof modelContextTesting.reset === 'function') {
+    return 'polyfill';
+  }
+
+  return 'native';
+}
 
 async function bootstrap() {
   const modelContext = navigator.modelContext;
@@ -51,6 +69,11 @@ async function bootstrap() {
   if (!modelContextTesting) {
     throw new Error('navigator.modelContextTesting is unavailable');
   }
+
+  const runtimeMode = detectRuntimeMode(modelContext, modelContextTesting);
+  runtimeEl.textContent = runtimeMode;
+  runtimeEl.dataset.runtime = runtimeMode;
+  statusEl.dataset.runtime = runtimeMode;
 
   modelContextTesting.reset?.();
 
@@ -141,16 +164,20 @@ async function bootstrap() {
   callsEl.textContent = JSON.stringify(recordedCalls, null, 2);
   callsEl.dataset.count = String(recordedCalls.length);
 
-  setStatus('Codemode executed against navigator.modelContextTesting', 'ready');
+  setStatus(`Codemode executed against navigator.modelContextTesting (${runtimeMode})`, 'ready');
 }
 
 setStatus('Booting codemode...', 'booting');
+runtimeEl.textContent = 'unknown';
+runtimeEl.dataset.runtime = 'unknown';
 resultEl.dataset.status = 'pending';
 
 void bootstrap().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   resultEl.textContent = message;
   resultEl.dataset.status = 'error';
+  runtimeEl.textContent = 'error';
+  runtimeEl.dataset.runtime = 'error';
   callsEl.textContent = '[]';
   callsEl.dataset.count = '0';
   setStatus(message, 'error');
