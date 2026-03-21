@@ -364,6 +364,65 @@ function handleListRequest(request: WidgetRequestMessage, event: MessageEvent): 
     });
 }
 
+/**
+ * Monkey-patches `navigator.modelContext.elicitInput` to bridge elicitation
+ * requests through the relay widget iframe to the local relay server, which
+ * forwards them to the MCP client (e.g. Claude Code).
+ *
+ * This is the same pattern used in `@mcp-b/chrome-devtools-mcp` for CDP-based
+ * elicitation forwarding. The relay widget and server handle the new
+ * `elicitation-request` / `elicitation-response` message types.
+ */
+let elicitBridgeInstalled = false;
+
+function installElicitBridge(widgetSource: MessageEventSource, widgetOrigin: string): void {
+  if (elicitBridgeInstalled) return;
+
+  const mc = getExtendedModelContext();
+  if (!mc || typeof mc.elicitInput !== 'function') return;
+
+  mc.elicitInput = (
+    params: Record<string, unknown>,
+    _options?: unknown
+  ): Promise<Record<string, unknown>> => {
+    const callId = createElicitCallId();
+    return new Promise<Record<string, unknown>>((resolve) => {
+      const handler = (event: MessageEvent): void => {
+        if (event.origin !== widgetOrigin) return;
+        const data = event.data as Record<string, unknown>;
+        if (
+          !isJsonObject(data) ||
+          data.type !== 'webmcp.elicitation.response' ||
+          data.callId !== callId
+        ) {
+          return;
+        }
+        window.removeEventListener('message', handler);
+        resolve(
+          isJsonObject(data.result)
+            ? (data.result as Record<string, unknown>)
+            : { action: 'decline', content: null }
+        );
+      };
+      window.addEventListener('message', handler);
+
+      (widgetSource as Window).postMessage(
+        { type: 'webmcp.elicitation.request', callId, params },
+        widgetOrigin
+      );
+    });
+  };
+
+  elicitBridgeInstalled = true;
+  debugWarn('Elicitation bridge installed');
+}
+
+let elicitCallCounter = 0;
+function createElicitCallId(): string {
+  elicitCallCounter += 1;
+  return `elicit_${String(Date.now())}_${String(elicitCallCounter)}`;
+}
+
 function handleInvokeRequest(request: WidgetRequestMessage, event: MessageEvent): void {
   const bridge = getToolBridge();
   if (!bridge) {
@@ -373,6 +432,12 @@ function handleInvokeRequest(request: WidgetRequestMessage, event: MessageEvent)
       error: 'No WebMCP runtime found on this page',
     });
     return;
+  }
+
+  // Install elicitation bridge before invoking the tool, so that tool
+  // handlers can call elicitInput() and have it forwarded to the MCP client.
+  if (event.source) {
+    installElicitBridge(event.source, event.origin);
   }
 
   Promise.resolve(bridge.invoke(String(request.toolName ?? ''), toInvokeArgs(request.args)))
