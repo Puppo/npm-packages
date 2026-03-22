@@ -392,7 +392,7 @@ function handleInvokeRequest(request: WidgetRequestMessage, event: MessageEvent)
     });
 }
 
-function injectRelayWidget(cfg: RelayConfig): void {
+async function injectRelayWidget(cfg: RelayConfig): Promise<void> {
   if (document.querySelector(RELAY_IFRAME_SELECTOR)) {
     return;
   }
@@ -415,8 +415,26 @@ function injectRelayWidget(cfg: RelayConfig): void {
     searchParams.set('relayWorkspace', cfg.relayWorkspace);
   }
 
+  // Try fetch + blob URL to work around CDNs serving .html as text/plain.
+  let blobUrl: string | null = null;
+  try {
+    const response = await fetch(cfg.widgetUrl);
+    if (response.ok) {
+      const html = await response.text();
+      const configScript = `<script>window.__WEBMCP_RELAY_CONFIG=${JSON.stringify(Object.fromEntries(searchParams))};</script>`;
+      const blob = new Blob([html.replace('</head>', `${configScript}</head>`)], {
+        type: 'text/html',
+      });
+      blobUrl = URL.createObjectURL(blob);
+      config.widgetOrigin = window.location.origin;
+    }
+  } catch (err) {
+    debugWarn('Failed to fetch widget HTML for blob URL:', err);
+  }
+
   const iframe = document.createElement('iframe');
-  iframe.src = `${cfg.widgetUrl}?${searchParams.toString()}`;
+  // Fallback: direct iframe src (works when widget.html is served as text/html).
+  iframe.src = blobUrl ?? `${cfg.widgetUrl}?${searchParams.toString()}`;
   iframe.style.display = 'none';
   iframe.setAttribute('aria-hidden', 'true');
   iframe.setAttribute('data-webmcp-relay', '1');
@@ -425,6 +443,9 @@ function injectRelayWidget(cfg: RelayConfig): void {
   widgetWindow = iframe.contentWindow;
   iframe.addEventListener('load', () => {
     widgetWindow = iframe.contentWindow;
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+    }
   });
   iframe.addEventListener('error', () => {
     console.error(
@@ -432,6 +453,9 @@ function injectRelayWidget(cfg: RelayConfig): void {
       iframe.src,
       '-- WebMCP tools will NOT be relayed. Check network connectivity and widget URL.'
     );
+    if (blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+    }
   });
 }
 
@@ -473,9 +497,11 @@ if (!document.querySelector(RELAY_IFRAME_SELECTOR)) {
   });
 
   if (document.body) {
-    injectRelayWidget(config);
+    void injectRelayWidget(config);
   } else {
-    document.addEventListener('DOMContentLoaded', () => injectRelayWidget(config), { once: true });
+    document.addEventListener('DOMContentLoaded', () => void injectRelayWidget(config), {
+      once: true,
+    });
   }
 
   subscribeToToolChanges();
