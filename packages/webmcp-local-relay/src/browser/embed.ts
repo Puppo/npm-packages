@@ -378,7 +378,14 @@ let elicitBridgeInstalled = false;
 function installElicitBridge(widgetSource: MessageEventSource, widgetOrigin: string): void {
   if (elicitBridgeInstalled) return;
 
-  const mc = getExtendedModelContext();
+  const mc = getExtendedModelContext() as
+    | (ModelContextWithExtensions & {
+        elicitInput?: (
+          params: Record<string, unknown>,
+          options?: unknown
+        ) => Promise<Record<string, unknown>>;
+      })
+    | undefined;
   if (!mc || typeof mc.elicitInput !== 'function') return;
 
   mc.elicitInput = (
