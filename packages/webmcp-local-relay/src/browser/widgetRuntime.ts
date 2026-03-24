@@ -451,6 +451,21 @@ export function runWidget(cfg: WidgetConfig): void {
         return;
       }
 
+      // Forward elicitation responses from relay back to embed.ts in the host page.
+      if (relayMessage.type === 'elicitation-response') {
+        window.parent.postMessage(
+          {
+            type: 'webmcp.elicitation.response',
+            callId: relayMessage.callId,
+            result: isJsonObject(relayMessage.result)
+              ? relayMessage.result
+              : { action: 'decline', content: null },
+          },
+          cfg.hostOrigin
+        );
+        return;
+      }
+
       if (relayMessage.type !== 'invoke') {
         console.debug(
           '[webmcp-relay-widget] Ignoring unrecognized message type:',
@@ -670,6 +685,21 @@ export function runWidget(cfg: WidgetConfig): void {
     if (isJsonObject(data) && data.type === 'webmcp.connect') {
       if (!activeSocket && state !== 'discovering') {
         void discoverRelay();
+      }
+      return;
+    }
+
+    // Forward elicitation requests from embed.ts to the relay WebSocket.
+    if (isJsonObject(data) && data.type === 'webmcp.elicitation.request') {
+      if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+        safeSend(
+          activeSocket,
+          JSON.stringify({
+            type: 'elicitation-request',
+            callId: data.callId,
+            params: isJsonObject(data.params) ? data.params : {},
+          })
+        );
       }
       return;
     }
