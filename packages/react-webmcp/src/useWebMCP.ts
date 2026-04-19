@@ -13,6 +13,7 @@ import type {
   ReactWebMCPInputSchema,
   ReactWebMCPOutputSchema,
   ToolExecutionState,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
 } from './types.js';
@@ -276,7 +277,7 @@ export function useWebMCP<
   TOutputSchema extends ReactWebMCPOutputSchema | undefined = undefined,
 >(
   config: WebMCPConfig<TInputSchema, TOutputSchema>,
-  deps?: DependencyList
+  depsOrOptions?: DependencyList | UseWebMCPOptions
 ): WebMCPReturn<TOutputSchema, TInputSchema> {
   type TOutput = InferOutput<TOutputSchema>;
   type TInput = InferToolInput<TInputSchema>;
@@ -292,6 +293,13 @@ export function useWebMCP<
     onError,
   } = config;
 
+  const isOptions =
+    depsOrOptions !== undefined &&
+    typeof depsOrOptions === 'object' &&
+    !Array.isArray(depsOrOptions);
+  const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
+  const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
+
   const [state, setState] = useState<ToolExecutionState<TOutput>>({
     isExecuting: false,
     lastResult: null,
@@ -304,6 +312,7 @@ export function useWebMCP<
   const onErrorRef = useRef(onError);
   const formatOutputRef = useRef(formatOutput);
   const isMountedRef = useRef(true);
+  const controllerRef = useRef<AbortController | null>(null);
   // Update refs when callbacks change (doesn't trigger re-registration)
   useIsomorphicLayoutEffect(() => {
     handlerRef.current = handler;
@@ -394,6 +403,13 @@ export function useWebMCP<
     });
   }, []);
 
+  /**
+   * Programmatically unregisters the tool by aborting the internal controller.
+   */
+  const unregister = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.navigator?.modelContext) {
       console.warn(
@@ -402,6 +418,10 @@ export function useWebMCP<
       );
       return;
     }
+
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
     const modelContext = window.navigator.modelContext;
 
     /**
@@ -465,7 +485,7 @@ export function useWebMCP<
     const registration = registerToolWithCompatibilityHandle(modelContext, toolDescriptor);
     TOOL_OWNER_BY_NAME.set(name, ownerToken);
 
-    return () => {
+    const cleanupTool = () => {
       const currentOwner = TOOL_OWNER_BY_NAME.get(name);
       if (currentOwner !== ownerToken) {
         return;
@@ -478,10 +498,18 @@ export function useWebMCP<
           return;
         }
 
-        modelContext.unregisterTool(name);
+        if (typeof modelContext.unregisterTool === 'function') {
+          modelContext.unregisterTool(name);
+        }
       } catch (error) {
         console.warn('[ReactWebMCP:useWebMCP]', `Failed to unregister tool "${name}"`, error);
       }
+    };
+
+    controller.signal.addEventListener('abort', cleanupTool, { once: true });
+
+    return () => {
+      cleanupTool();
     };
     // Spread operator in dependencies intentionally allows consumers to trigger
     // re-registration with custom reactive inputs.
@@ -491,5 +519,6 @@ export function useWebMCP<
     state,
     execute: stableExecute,
     reset,
+    unregister,
   };
 }

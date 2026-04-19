@@ -1187,6 +1187,102 @@ describe('useWebMCP', () => {
     });
   });
 
+  describe('programmatic unregistration', () => {
+    it('should unregister the tool when unregister() is called', async () => {
+      const { result, unmount } = await renderHook(() =>
+        useWebMCP({
+          name: 'unregister_fn_tool',
+          description: 'Test programmatic unregistration',
+          handler: async () => 'result',
+        })
+      );
+
+      expect(navigator.modelContextTesting?.listTools()).toHaveLength(1);
+
+      result.current.unregister();
+
+      expect(navigator.modelContextTesting?.listTools()).toHaveLength(0);
+
+      // Unmounting after unregister should not throw
+      unmount();
+    });
+
+    it('should expose unregister as a stable function reference', async () => {
+      const { result, rerender } = await renderHook(() =>
+        useWebMCP({
+          name: 'unregister_stable_tool',
+          description: 'Test stable unregister reference',
+          handler: async () => 'result',
+        })
+      );
+
+      const firstUnregister = result.current.unregister;
+      await rerender();
+      expect(result.current.unregister).toBe(firstUnregister);
+    });
+
+    it('should support deps inside options object', async () => {
+      const registerToolSpy = vi.spyOn(navigator.modelContext, 'registerTool');
+
+      try {
+        const { rerender } = await renderHook(
+          ({ count }) =>
+            useWebMCP(
+              {
+                name: 'options_deps_tool',
+                description: `Count: ${count}`,
+                handler: async () => `count is ${count}`,
+              },
+              { deps: [count] }
+            ),
+          { initialProps: { count: 1 } }
+        );
+
+        expect(registerToolSpy).toHaveBeenCalledTimes(1);
+
+        await rerender({ count: 2 });
+
+        expect(registerToolSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        registerToolSpy.mockRestore();
+      }
+    });
+
+    it('should unregister via unregister() when modelContext lacks unregisterTool', async () => {
+      const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'modelContext');
+      const unregisterHandle = vi.fn();
+
+      Object.defineProperty(navigator, 'modelContext', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: {
+          registerTool: vi.fn(() => ({ unregister: unregisterHandle })),
+        },
+      });
+
+      try {
+        const { result } = await renderHook(() =>
+          useWebMCP({
+            name: 'unregister_no_method_tool',
+            description: 'Test',
+            handler: async () => 'result',
+          })
+        );
+
+        result.current.unregister();
+
+        expect(unregisterHandle).toHaveBeenCalledTimes(1);
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(navigator, 'modelContext', originalDescriptor);
+        } else {
+          delete (navigator as unknown as Record<string, unknown>).modelContext;
+        }
+      }
+    });
+  });
+
   describe('toStructuredContent edge cases', () => {
     it('should handle circular references in handler result with outputSchema', async () => {
       // Create an object with a circular reference - JSON.stringify will throw

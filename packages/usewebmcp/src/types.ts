@@ -6,6 +6,7 @@ import type {
   JsonSchemaForInference,
   ToolAnnotations,
 } from '@mcp-b/webmcp-types';
+import type { DependencyList } from 'react';
 
 /**
  * Infers tool input type from either a Standard Schema or JSON Schema.
@@ -293,6 +294,21 @@ export type WebMCPConfig<
   WebMCPConfigImplementation<TInputSchema, TOutputSchema>;
 
 /**
+ * Options object for the `useWebMCP` hook's second parameter.
+ *
+ * Accepts either this options object or a plain `DependencyList` array for
+ * backward compatibility.
+ *
+ * @public
+ */
+export interface UseWebMCPOptions {
+  /**
+   * Optional dependency array that triggers tool re-registration when values change.
+   */
+  deps?: DependencyList;
+}
+
+/**
  * Return value from the `useWebMCP` hook.
  * Provides access to execution state and methods for manual tool control.
  *
@@ -324,4 +340,14 @@ export interface WebMCPReturn<
    * Clears results, errors, and resets the execution count.
    */
   reset: () => void;
+
+  /**
+   * Programmatically unregister the tool without unmounting the component.
+   * Useful when the tool should no longer be available to AI assistants
+   * based on application state (e.g., user permissions, feature flags).
+   *
+   * After calling this, the tool will no longer appear in `listTools()` until
+   * the hook re-registers it (e.g., on the next dependency change or remount).
+   */
+  unregister: () => void;
 }

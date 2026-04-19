@@ -12,6 +12,7 @@ import type {
   InferOutput,
   InferToolInput,
   ToolExecutionState,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
 } from './types.js';
@@ -283,7 +284,7 @@ export function useWebMCP<
   TOutputSchema extends JsonSchemaForInference | undefined = undefined,
 >(
   config: WebMCPConfig<TInputSchema, TOutputSchema>,
-  deps?: DependencyList
+  depsOrOptions?: DependencyList | UseWebMCPOptions
 ): WebMCPReturn<TOutputSchema, TInputSchema> {
   type TOutput = InferOutput<TOutputSchema>;
   type TInput = InferToolInput<TInputSchema>;
@@ -300,6 +301,13 @@ export function useWebMCP<
     onError,
   } = config;
   const toolExecute = configExecute ?? legacyHandler;
+
+  const isOptions =
+    depsOrOptions !== undefined &&
+    typeof depsOrOptions === 'object' &&
+    !Array.isArray(depsOrOptions);
+  const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
+  const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
 
   if (!toolExecute) {
     throw new TypeError(
@@ -320,6 +328,7 @@ export function useWebMCP<
   const formatOutputRef = useRef(formatOutput);
   const isMountedRef = useRef(true);
   const warnedRef = useRef(new Set<string>());
+  const controllerRef = useRef<AbortController | null>(null);
   const prevConfigRef = useRef({
     inputSchema,
     outputSchema,
@@ -475,6 +484,13 @@ export function useWebMCP<
     });
   }, []);
 
+  /**
+   * Programmatically unregisters the tool by aborting the internal controller.
+   */
+  const unregister = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.navigator?.modelContext) {
       console.warn(
@@ -482,6 +498,9 @@ export function useWebMCP<
       );
       return;
     }
+
+    const controller = new AbortController();
+    controllerRef.current = controller;
 
     /**
      * Handles MCP tool execution by running the tool implementation and formatting the response.
@@ -545,7 +564,7 @@ export function useWebMCP<
     const registration = registerToolWithCompatibilityHandle(modelContext, toolDescriptor);
     TOOL_OWNER_BY_NAME.set(name, ownerToken);
 
-    return () => {
+    const cleanupTool = () => {
       const currentOwner = TOOL_OWNER_BY_NAME.get(name);
       if (currentOwner !== ownerToken) {
         return;
@@ -558,12 +577,20 @@ export function useWebMCP<
           return;
         }
 
-        modelContext.unregisterTool(name);
+        if (typeof modelContext.unregisterTool === 'function') {
+          modelContext.unregisterTool(name);
+        }
       } catch (error) {
         if (isDev()) {
           console.warn(`[useWebMCP] Failed to unregister tool "${name}" during cleanup:`, error);
         }
       }
+    };
+
+    controller.signal.addEventListener('abort', cleanupTool, { once: true });
+
+    return () => {
+      cleanupTool();
     };
     // Spread operator in dependencies: Allows users to provide additional dependencies
     // via the `deps` parameter. While unconventional, this pattern is intentional to support
@@ -575,5 +602,6 @@ export function useWebMCP<
     state,
     execute: stableExecute,
     reset,
+    unregister,
   };
 }

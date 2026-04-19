@@ -48,6 +48,7 @@ export type {
   ReactWebMCPInputSchema,
   ToolExecutionState,
   ToolInputSchema,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
   ZodSchemaObject,
