@@ -502,10 +502,6 @@ export function useWebMCP<
     const controller = new AbortController();
     controllerRef.current = controller;
 
-    if (controller.signal.aborted) {
-      return;
-    }
-
     /**
      * Handles MCP tool execution by running the tool implementation and formatting the response.
      *
@@ -594,7 +590,6 @@ export function useWebMCP<
     controller.signal.addEventListener('abort', cleanupTool, { once: true });
 
     return () => {
-      controller.signal.removeEventListener('abort', cleanupTool);
       cleanupTool();
     };
     // Spread operator in dependencies: Allows users to provide additional dependencies

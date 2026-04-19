@@ -509,7 +509,6 @@ export function useWebMCP<
     controller.signal.addEventListener('abort', cleanupTool, { once: true });
 
     return () => {
-      controller.signal.removeEventListener('abort', cleanupTool);
       cleanupTool();
     };
     // Spread operator in dependencies intentionally allows consumers to trigger
