@@ -293,7 +293,10 @@ export function useWebMCP<
     onError,
   } = config;
 
-  const isOptions = depsOrOptions !== undefined && !Array.isArray(depsOrOptions);
+  const isOptions =
+    depsOrOptions !== undefined &&
+    typeof depsOrOptions === 'object' &&
+    !Array.isArray(depsOrOptions);
   const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
   const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
   const signal = options?.signal;
