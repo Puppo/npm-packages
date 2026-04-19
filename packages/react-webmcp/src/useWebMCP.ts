@@ -13,6 +13,7 @@ import type {
   ReactWebMCPInputSchema,
   ReactWebMCPOutputSchema,
   ToolExecutionState,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
 } from './types.js';
@@ -276,7 +277,7 @@ export function useWebMCP<
   TOutputSchema extends ReactWebMCPOutputSchema | undefined = undefined,
 >(
   config: WebMCPConfig<TInputSchema, TOutputSchema>,
-  deps?: DependencyList
+  depsOrOptions?: DependencyList | UseWebMCPOptions
 ): WebMCPReturn<TOutputSchema, TInputSchema> {
   type TOutput = InferOutput<TOutputSchema>;
   type TInput = InferToolInput<TInputSchema>;
@@ -291,6 +292,11 @@ export function useWebMCP<
     onSuccess,
     onError,
   } = config;
+
+  const isOptions = depsOrOptions !== undefined && !Array.isArray(depsOrOptions);
+  const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
+  const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
+  const signal = options?.signal;
 
   const [state, setState] = useState<ToolExecutionState<TOutput>>({
     isExecuting: false,
@@ -402,6 +408,11 @@ export function useWebMCP<
       );
       return;
     }
+
+    if (signal?.aborted) {
+      return;
+    }
+
     const modelContext = window.navigator.modelContext;
 
     /**
@@ -465,7 +476,7 @@ export function useWebMCP<
     const registration = registerToolWithCompatibilityHandle(modelContext, toolDescriptor);
     TOOL_OWNER_BY_NAME.set(name, ownerToken);
 
-    return () => {
+    const cleanupTool = () => {
       const currentOwner = TOOL_OWNER_BY_NAME.get(name);
       if (currentOwner !== ownerToken) {
         return;
@@ -478,14 +489,23 @@ export function useWebMCP<
           return;
         }
 
-        modelContext.unregisterTool(name);
+        if (typeof modelContext.unregisterTool === 'function') {
+          modelContext.unregisterTool(name);
+        }
       } catch (error) {
         console.warn('[ReactWebMCP:useWebMCP]', `Failed to unregister tool "${name}"`, error);
       }
     };
+
+    signal?.addEventListener('abort', cleanupTool, { once: true });
+
+    return () => {
+      signal?.removeEventListener('abort', cleanupTool);
+      cleanupTool();
+    };
     // Spread operator in dependencies intentionally allows consumers to trigger
     // re-registration with custom reactive inputs.
-  }, [name, description, inputSchema, outputSchema, annotations, ...(deps ?? [])]);
+  }, [name, description, inputSchema, outputSchema, annotations, signal, ...(deps ?? [])]);
 
   return {
     state,

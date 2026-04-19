@@ -12,6 +12,7 @@ import type {
   InferOutput,
   InferToolInput,
   ToolExecutionState,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
 } from './types.js';
@@ -283,7 +284,7 @@ export function useWebMCP<
   TOutputSchema extends JsonSchemaForInference | undefined = undefined,
 >(
   config: WebMCPConfig<TInputSchema, TOutputSchema>,
-  deps?: DependencyList
+  depsOrOptions?: DependencyList | UseWebMCPOptions
 ): WebMCPReturn<TOutputSchema, TInputSchema> {
   type TOutput = InferOutput<TOutputSchema>;
   type TInput = InferToolInput<TInputSchema>;
@@ -300,6 +301,11 @@ export function useWebMCP<
     onError,
   } = config;
   const toolExecute = configExecute ?? legacyHandler;
+
+  const isOptions = depsOrOptions !== undefined && !Array.isArray(depsOrOptions);
+  const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
+  const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
+  const signal = options?.signal;
 
   if (!toolExecute) {
     throw new TypeError(
@@ -483,6 +489,10 @@ export function useWebMCP<
       return;
     }
 
+    if (signal?.aborted) {
+      return;
+    }
+
     /**
      * Handles MCP tool execution by running the tool implementation and formatting the response.
      *
@@ -545,7 +555,7 @@ export function useWebMCP<
     const registration = registerToolWithCompatibilityHandle(modelContext, toolDescriptor);
     TOOL_OWNER_BY_NAME.set(name, ownerToken);
 
-    return () => {
+    const cleanupTool = () => {
       const currentOwner = TOOL_OWNER_BY_NAME.get(name);
       if (currentOwner !== ownerToken) {
         return;
@@ -558,18 +568,27 @@ export function useWebMCP<
           return;
         }
 
-        modelContext.unregisterTool(name);
+        if (typeof modelContext.unregisterTool === 'function') {
+          modelContext.unregisterTool(name);
+        }
       } catch (error) {
         if (isDev()) {
           console.warn(`[useWebMCP] Failed to unregister tool "${name}" during cleanup:`, error);
         }
       }
     };
+
+    signal?.addEventListener('abort', cleanupTool, { once: true });
+
+    return () => {
+      signal?.removeEventListener('abort', cleanupTool);
+      cleanupTool();
+    };
     // Spread operator in dependencies: Allows users to provide additional dependencies
     // via the `deps` parameter. While unconventional, this pattern is intentional to support
     // dynamic dependency injection. The spread is safe because deps is validated and warned
     // about non-primitive values earlier in this hook.
-  }, [name, description, inputSchema, outputSchema, annotations, ...(deps ?? [])]);
+  }, [name, description, inputSchema, outputSchema, annotations, signal, ...(deps ?? [])]);
 
   return {
     state,

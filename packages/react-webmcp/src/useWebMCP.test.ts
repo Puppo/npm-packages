@@ -937,6 +937,115 @@ describe('useWebMCP', () => {
     });
   });
 
+  describe('signal-based unregistration', () => {
+    it('should unregister the tool when signal is aborted', async () => {
+      const controller = new AbortController();
+
+      const { unmount } = await renderHook(() =>
+        useWebMCP(
+          {
+            name: 'signal_abort_tool',
+            description: 'Test signal-based unregistration',
+            handler: async () => 'result',
+          },
+          { signal: controller.signal }
+        )
+      );
+
+      expect(navigator.modelContextTesting?.listTools()).toHaveLength(1);
+
+      controller.abort();
+
+      expect(navigator.modelContextTesting?.listTools()).toHaveLength(0);
+
+      // Unmounting after abort should not throw
+      unmount();
+    });
+
+    it('should not register the tool if signal is already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await renderHook(() =>
+        useWebMCP(
+          {
+            name: 'pre_aborted_tool',
+            description: 'Test pre-aborted signal',
+            handler: async () => 'result',
+          },
+          { signal: controller.signal }
+        )
+      );
+
+      expect(navigator.modelContextTesting?.listTools()).toHaveLength(0);
+    });
+
+    it('should support deps inside options object', async () => {
+      const registerToolSpy = vi.spyOn(navigator.modelContext, 'registerTool');
+
+      try {
+        const { rerender } = await renderHook(
+          ({ count }) =>
+            useWebMCP(
+              {
+                name: 'signal_deps_tool',
+                description: `Count: ${count}`,
+                handler: async () => count,
+              },
+              { deps: [count] }
+            ),
+          { initialProps: { count: 1 } }
+        );
+
+        expect(registerToolSpy).toHaveBeenCalledTimes(1);
+
+        await rerender({ count: 2 });
+
+        expect(registerToolSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        registerToolSpy.mockRestore();
+      }
+    });
+
+    it('should unregister via signal when modelContext lacks unregisterTool', async () => {
+      const controller = new AbortController();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'modelContext');
+      const unregister = vi.fn();
+
+      Object.defineProperty(navigator, 'modelContext', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: {
+          registerTool: vi.fn(() => ({ unregister })),
+        },
+      });
+
+      try {
+        await renderHook(() =>
+          useWebMCP(
+            {
+              name: 'signal_no_unregister_method_tool',
+              description: 'Test',
+              handler: async () => 'result',
+            },
+            { signal: controller.signal }
+          )
+        );
+
+        controller.abort();
+
+        expect(unregister).toHaveBeenCalledTimes(1);
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(navigator, 'modelContext', originalDescriptor);
+        } else {
+          delete (navigator as unknown as Record<string, unknown>).modelContext;
+        }
+      }
+    });
+  });
+
   describe('modelContext unavailability', () => {
     it('should warn when modelContext is not available', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

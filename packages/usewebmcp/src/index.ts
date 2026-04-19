@@ -18,6 +18,7 @@ export type {
   InferToolInput,
   ToolExecuteFunction,
   ToolExecutionState,
+  UseWebMCPOptions,
   WebMCPConfig,
   WebMCPReturn,
 } from './types.js';

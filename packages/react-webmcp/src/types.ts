@@ -8,6 +8,7 @@ import type {
   JsonSchemaForInference,
   ToolAnnotations,
 } from '@mcp-b/webmcp-types';
+import type { DependencyList } from 'react';
 import type { z } from 'zod';
 import type { ZodSchemaObject } from './zod-utils.js';
 
@@ -276,6 +277,37 @@ export interface WebMCPConfig<
    * @param input - The input that was passed to the handler
    */
   onError?: (error: Error, input: unknown) => void;
+}
+
+/**
+ * Options object for the `useWebMCP` hook's second parameter.
+ *
+ * Accepts either this options object or a plain `DependencyList` array for
+ * backward compatibility.
+ *
+ * @public
+ */
+export interface UseWebMCPOptions {
+  /**
+   * Optional `AbortSignal` to programmatically unregister the tool.
+   * When the signal is aborted, the tool is immediately unregistered.
+   *
+   * @example
+   * ```tsx
+   * const controller = new AbortController();
+   *
+   * useWebMCP({ name: 'my_tool', ... }, { signal: controller.signal });
+   *
+   * // Later, to unregister the tool:
+   * controller.abort();
+   * ```
+   */
+  signal?: AbortSignal;
+
+  /**
+   * Optional dependency array that triggers tool re-registration when values change.
+   */
+  deps?: DependencyList;
 }
 
 /**
