@@ -308,7 +308,6 @@ export function useWebMCP<
     !Array.isArray(depsOrOptions);
   const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
   const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
-  const signal = options?.signal;
 
   if (!toolExecute) {
     throw new TypeError(
@@ -329,6 +328,7 @@ export function useWebMCP<
   const formatOutputRef = useRef(formatOutput);
   const isMountedRef = useRef(true);
   const warnedRef = useRef(new Set<string>());
+  const controllerRef = useRef<AbortController | null>(null);
   const prevConfigRef = useRef({
     inputSchema,
     outputSchema,
@@ -484,6 +484,13 @@ export function useWebMCP<
     });
   }, []);
 
+  /**
+   * Programmatically unregisters the tool by aborting the internal controller.
+   */
+  const unregister = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.navigator?.modelContext) {
       console.warn(
@@ -492,7 +499,10 @@ export function useWebMCP<
       return;
     }
 
-    if (signal?.aborted) {
+    const controller = new AbortController();
+    controllerRef.current = controller;
+
+    if (controller.signal.aborted) {
       return;
     }
 
@@ -581,21 +591,22 @@ export function useWebMCP<
       }
     };
 
-    signal?.addEventListener('abort', cleanupTool, { once: true });
+    controller.signal.addEventListener('abort', cleanupTool, { once: true });
 
     return () => {
-      signal?.removeEventListener('abort', cleanupTool);
+      controller.signal.removeEventListener('abort', cleanupTool);
       cleanupTool();
     };
     // Spread operator in dependencies: Allows users to provide additional dependencies
     // via the `deps` parameter. While unconventional, this pattern is intentional to support
     // dynamic dependency injection. The spread is safe because deps is validated and warned
     // about non-primitive values earlier in this hook.
-  }, [name, description, inputSchema, outputSchema, annotations, signal, ...(deps ?? [])]);
+  }, [name, description, inputSchema, outputSchema, annotations, ...(deps ?? [])]);
 
   return {
     state,
     execute: stableExecute,
     reset,
+    unregister,
   };
 }

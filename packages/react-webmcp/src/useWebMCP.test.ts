@@ -937,47 +937,38 @@ describe('useWebMCP', () => {
     });
   });
 
-  describe('signal-based unregistration', () => {
-    it('should unregister the tool when signal is aborted', async () => {
-      const controller = new AbortController();
-
-      const { unmount } = await renderHook(() =>
-        useWebMCP(
-          {
-            name: 'signal_abort_tool',
-            description: 'Test signal-based unregistration',
-            handler: async () => 'result',
-          },
-          { signal: controller.signal }
-        )
+  describe('programmatic unregistration', () => {
+    it('should unregister the tool when unregister() is called', async () => {
+      const { result, unmount } = await renderHook(() =>
+        useWebMCP({
+          name: 'unregister_fn_tool',
+          description: 'Test programmatic unregistration',
+          handler: async () => 'result',
+        })
       );
 
       expect(navigator.modelContextTesting?.listTools()).toHaveLength(1);
 
-      controller.abort();
+      result.current.unregister();
 
       expect(navigator.modelContextTesting?.listTools()).toHaveLength(0);
 
-      // Unmounting after abort should not throw
+      // Unmounting after unregister should not throw
       unmount();
     });
 
-    it('should not register the tool if signal is already aborted', async () => {
-      const controller = new AbortController();
-      controller.abort();
-
-      await renderHook(() =>
-        useWebMCP(
-          {
-            name: 'pre_aborted_tool',
-            description: 'Test pre-aborted signal',
-            handler: async () => 'result',
-          },
-          { signal: controller.signal }
-        )
+    it('should expose unregister as a stable function reference', async () => {
+      const { result, rerender } = await renderHook(() =>
+        useWebMCP({
+          name: 'unregister_stable_tool',
+          description: 'Test stable unregister reference',
+          handler: async () => 'result',
+        })
       );
 
-      expect(navigator.modelContextTesting?.listTools()).toHaveLength(0);
+      const firstUnregister = result.current.unregister;
+      await rerender();
+      expect(result.current.unregister).toBe(firstUnregister);
     });
 
     it('should support deps inside options object', async () => {
@@ -988,7 +979,7 @@ describe('useWebMCP', () => {
           ({ count }) =>
             useWebMCP(
               {
-                name: 'signal_deps_tool',
+                name: 'options_deps_tool',
                 description: `Count: ${count}`,
                 handler: async () => count,
               },
@@ -1007,35 +998,31 @@ describe('useWebMCP', () => {
       }
     });
 
-    it('should unregister via signal when modelContext lacks unregisterTool', async () => {
-      const controller = new AbortController();
+    it('should unregister via unregister() when modelContext lacks unregisterTool', async () => {
       const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, 'modelContext');
-      const unregister = vi.fn();
+      const unregisterHandle = vi.fn();
 
       Object.defineProperty(navigator, 'modelContext', {
         configurable: true,
         enumerable: true,
         writable: true,
         value: {
-          registerTool: vi.fn(() => ({ unregister })),
+          registerTool: vi.fn(() => ({ unregister: unregisterHandle })),
         },
       });
 
       try {
-        await renderHook(() =>
-          useWebMCP(
-            {
-              name: 'signal_no_unregister_method_tool',
-              description: 'Test',
-              handler: async () => 'result',
-            },
-            { signal: controller.signal }
-          )
+        const { result } = await renderHook(() =>
+          useWebMCP({
+            name: 'unregister_no_method_tool',
+            description: 'Test',
+            handler: async () => 'result',
+          })
         );
 
-        controller.abort();
+        result.current.unregister();
 
-        expect(unregister).toHaveBeenCalledTimes(1);
+        expect(unregisterHandle).toHaveBeenCalledTimes(1);
       } finally {
         if (originalDescriptor) {
           Object.defineProperty(navigator, 'modelContext', originalDescriptor);

@@ -299,7 +299,6 @@ export function useWebMCP<
     !Array.isArray(depsOrOptions);
   const options = isOptions ? (depsOrOptions as UseWebMCPOptions) : undefined;
   const deps = options ? options.deps : (depsOrOptions as DependencyList | undefined);
-  const signal = options?.signal;
 
   const [state, setState] = useState<ToolExecutionState<TOutput>>({
     isExecuting: false,
@@ -313,6 +312,7 @@ export function useWebMCP<
   const onErrorRef = useRef(onError);
   const formatOutputRef = useRef(formatOutput);
   const isMountedRef = useRef(true);
+  const controllerRef = useRef<AbortController | null>(null);
   // Update refs when callbacks change (doesn't trigger re-registration)
   useIsomorphicLayoutEffect(() => {
     handlerRef.current = handler;
@@ -403,6 +403,13 @@ export function useWebMCP<
     });
   }, []);
 
+  /**
+   * Programmatically unregisters the tool by aborting the internal controller.
+   */
+  const unregister = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined' || !window.navigator?.modelContext) {
       console.warn(
@@ -412,9 +419,8 @@ export function useWebMCP<
       return;
     }
 
-    if (signal?.aborted) {
-      return;
-    }
+    const controller = new AbortController();
+    controllerRef.current = controller;
 
     const modelContext = window.navigator.modelContext;
 
@@ -500,19 +506,20 @@ export function useWebMCP<
       }
     };
 
-    signal?.addEventListener('abort', cleanupTool, { once: true });
+    controller.signal.addEventListener('abort', cleanupTool, { once: true });
 
     return () => {
-      signal?.removeEventListener('abort', cleanupTool);
+      controller.signal.removeEventListener('abort', cleanupTool);
       cleanupTool();
     };
     // Spread operator in dependencies intentionally allows consumers to trigger
     // re-registration with custom reactive inputs.
-  }, [name, description, inputSchema, outputSchema, annotations, signal, ...(deps ?? [])]);
+  }, [name, description, inputSchema, outputSchema, annotations, ...(deps ?? [])]);
 
   return {
     state,
     execute: stableExecute,
     reset,
+    unregister,
   };
 }

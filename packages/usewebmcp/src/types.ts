@@ -303,22 +303,6 @@ export type WebMCPConfig<
  */
 export interface UseWebMCPOptions {
   /**
-   * Optional `AbortSignal` to programmatically unregister the tool.
-   * When the signal is aborted, the tool is immediately unregistered.
-   *
-   * @example
-   * ```tsx
-   * const controller = new AbortController();
-   *
-   * useWebMCP({ name: 'my_tool', ... }, { signal: controller.signal });
-   *
-   * // Later, to unregister the tool:
-   * controller.abort();
-   * ```
-   */
-  signal?: AbortSignal;
-
-  /**
    * Optional dependency array that triggers tool re-registration when values change.
    */
   deps?: DependencyList;
@@ -356,4 +340,14 @@ export interface WebMCPReturn<
    * Clears results, errors, and resets the execution count.
    */
   reset: () => void;
+
+  /**
+   * Programmatically unregister the tool without unmounting the component.
+   * Useful when the tool should no longer be available to AI assistants
+   * based on application state (e.g., user permissions, feature flags).
+   *
+   * After calling this, the tool will no longer appear in `listTools()` until
+   * the hook re-registers it (e.g., on the next dependency change or remount).
+   */
+  unregister: () => void;
 }
